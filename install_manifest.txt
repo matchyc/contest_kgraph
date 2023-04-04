@@ -1,0 +1,4 @@
+/usr/local/include/kgraph.h
+/usr/local/include/kgraph-data.h
+/usr/local/lib/libkgraph.so
+/usr/local/lib/libkgraph.a

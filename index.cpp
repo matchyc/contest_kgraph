@@ -15,6 +15,8 @@
 #include <boost/timer/timer.hpp>
 #include <boost/format.hpp>
 #include <boost/program_options.hpp>
+#include <omp.h>
+#include <chrono>
 #include "kgraph.h"
 #include "kgraph-data.h"
 
@@ -28,6 +30,8 @@ namespace po = boost::program_options;
 typedef KGRAPH_VALUE_TYPE value_type;
 
 int main (int argc, char *argv[]) {
+    omp_set_num_threads(32);
+    auto start_time = std::chrono::high_resolution_clock::now();
     string data_path;
     string output_path;
     KGraph::IndexParams params;
@@ -114,7 +118,7 @@ int main (int argc, char *argv[]) {
         skip = LSHKIT_HEADER * sizeof(unsigned);
         gap = 0;
     }
-
+    std::cout << "KGRAPH_MATRIX_ALIGN: " << KGRAPH_MATRIX_ALIGN << std::endl;
     Matrix<value_type> data;
     if (synthetic) {
         if (!std::is_floating_point<value_type>::value) {
@@ -133,6 +137,7 @@ int main (int argc, char *argv[]) {
         }
     }
     else {
+        std::cout << "dim: " << D << " skip: " << skip << " gap: " << gap << std::endl;
         data.load(data_path, D, skip, gap);
     }
     if (noise != 0) {
@@ -169,7 +174,7 @@ int main (int argc, char *argv[]) {
     KGraph::IndexInfo info;
     KGraph *kgraph = KGraph::create(); //(oracle, params, &info);
     {
-        auto_cpu_timer timer;
+        // auto_cpu_timer timer;
         kgraph->build(oracle, params, &info);
         cerr << info.stop_condition << endl;
     }
@@ -177,7 +182,10 @@ int main (int argc, char *argv[]) {
         kgraph->save(output_path.c_str());
     }
     delete kgraph;
+    auto end_time = std::chrono::high_resolution_clock::now();
+    auto duration_in_seconds = std::chrono::duration_cast<std::chrono::seconds>(end_time - start_time).count();
 
+    std::cout << "Duration in seconds: " << duration_in_seconds << "\n";
     return 0;
 }
 

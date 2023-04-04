@@ -20,7 +20,7 @@ namespace kgraph {
     static unsigned const default_S = 10;
     static unsigned const default_R = 100;
     static unsigned const default_controls = 100;
-    static unsigned const default_seed = 1998;
+    static unsigned const default_seed = 2331;
     static float const default_delta = 0.002;
     static float const default_recall = 0.99;
     static float const default_epsilon = 1e30;

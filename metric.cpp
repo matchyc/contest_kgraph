@@ -31,6 +31,7 @@ float float_dot (float const *t1, float const *t2, unsigned dim) {
 
 #ifdef __GNUC__
 #ifdef __AVX__
+// #if 1
 #include <immintrin.h>
 #define AVX_L2SQR(addr1, addr2, dest, tmp1, tmp2) \
     tmp1 = _mm256_loadu_ps(addr1);\
@@ -39,6 +40,81 @@ float float_dot (float const *t1, float const *t2, unsigned dim) {
     tmp1 = _mm256_mul_ps(tmp1, tmp1); \
     dest = _mm256_add_ps(dest, tmp1); 
 namespace kgraph {
+float avx512_l2_distance(float const * a, float const * b, unsigned n) {
+  const int kFloatsPerVec = 16;
+  __m512 sum1 = _mm512_setzero_ps();
+  __m512 sum2 = _mm512_setzero_ps();
+  __m512 sum3 = _mm512_setzero_ps();
+  __m512 sum4 = _mm512_setzero_ps();
+  int i = 0;
+  for (; i + 4 * kFloatsPerVec <= n; i += 4 * kFloatsPerVec) {
+    // Load four sets of 16 floats from a and b with aligned memory access
+    __m512 a_vec1 = _mm512_load_ps(&a[i]);
+    __m512 a_vec2 = _mm512_load_ps(&a[i + kFloatsPerVec]);
+    __m512 a_vec3 = _mm512_load_ps(&a[i + 2 * kFloatsPerVec]);
+    __m512 a_vec4 = _mm512_load_ps(&a[i + 3 * kFloatsPerVec]);
+    __m512 b_vec1 = _mm512_load_ps(&b[i]);
+    __m512 b_vec2 = _mm512_load_ps(&b[i + kFloatsPerVec]);
+    __m512 b_vec3 = _mm512_load_ps(&b[i + 2 * kFloatsPerVec]);
+    __m512 b_vec4 = _mm512_load_ps(&b[i + 3 * kFloatsPerVec]);
+
+    // Calculate difference and square the result
+    __m512 diff1 = _mm512_sub_ps(a_vec1, b_vec1);
+    __m512 diff2 = _mm512_sub_ps(a_vec2, b_vec2);
+    __m512 diff3 = _mm512_sub_ps(a_vec3, b_vec3);
+    __m512 diff4 = _mm512_sub_ps(a_vec4, b_vec4);
+    __m512 squared1 = _mm512_mul_ps(diff1, diff1);
+    __m512 squared2 = _mm512_mul_ps(diff2, diff2);
+    __m512 squared3 = _mm512_mul_ps(diff3, diff3);
+    __m512 squared4 = _mm512_mul_ps(diff4, diff4);
+
+    // Accumulate the results in four separate sum vectors
+    sum1 = _mm512_add_ps(sum1, squared1);
+    sum2 = _mm512_add_ps(sum2, squared2);
+    sum3 = _mm512_add_ps(sum3, squared3);
+    sum4 = _mm512_add_ps(sum4, squared4);
+  }
+
+  // Combine the four sum vectors to a single sum vector
+  __m512 sum12 = _mm512_add_ps(sum1, sum2);
+  __m512 sum34 = _mm512_add_ps(sum3, sum4);
+  __m512 sum1234 = _mm512_add_ps(sum12, sum34);
+
+  float result = 0;
+  // Sum the remaining floats in the sum vector using non-vectorized operations
+  for (int j = 0; j < kFloatsPerVec; j++) {
+    result += ((float*)&sum1234)[j];
+  }
+  // Process the remaining elements with non-vectorized operations
+  for (; i < n; i++) {
+    float diff = a[i] - b[i];
+    result += diff * diff;
+  }
+  return result;
+}
+
+// float avx2_l2_distance(const float* a, const float* b, unsigned dim) {
+//     __m256 sum = _mm256_setzero_ps(); // Initialize sum to 0
+//     unsigned i;
+//     for (i = 0; i < dim - 7; i += 8) { // Process 8 floats at a time
+//         __m256 a_vec = _mm256_loadu_ps(&a[i]); // Load 8 floats from a
+//         __m256 b_vec = _mm256_loadu_ps(&b[i]); // Load 8 floats from b
+//         __m256 diff = _mm256_sub_ps(a_vec, b_vec); // Calculate difference
+//         sum = _mm256_fmadd_ps(diff, diff, sum); // Calculate sum of squares
+//     }
+//     float result = 0;
+//     float temp[8] __attribute__((aligned(32)));
+//     _mm256_store_ps(temp, sum);
+//     for (unsigned j = 0; j < 8; ++j) { // Reduce sum to a single float
+//         result += temp[j];
+//     }
+//     for (; i < dim; ++i) { // Process remaining floats
+//         float diff = a[i] - b[i];
+//         result += diff * diff;
+//     }
+//     return sqrtf(result); // Return square root of sum
+// }
+
 float float_l2sqr_avx (float const *t1, float const *t2, unsigned dim) {
     __m256 sum;
     __m256 l0, l1, l2, l3;

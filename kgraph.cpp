@@ -23,6 +23,7 @@ static char const *kgraph_version = STRINGIFY(KGRAPH_VERSION) "-" STRINGIFY(KGRA
 #include <boost/timer/timer.hpp>
 #define timer timer_for_boost_progress_t
 #include <boost/progress.hpp>
+#include <boost/timer/timer.hpp>
 #undef timer
 #include <boost/dynamic_bitset.hpp>
 #include <boost/accumulators/accumulators.hpp>
@@ -212,7 +213,7 @@ namespace kgraph {
         return UpdateKnnListHelper<NeighborX>(addr, K, nn);
     }
 
-    void LinearSearch (IndexOracle const &oracle, unsigned i, unsigned K, vector<Neighbor> *pnns) {
+inline  void LinearSearch (IndexOracle const &oracle, unsigned i, unsigned K, vector<Neighbor> *pnns) {
         vector<Neighbor> nns(K+1);
         unsigned N = oracle.size();
         Neighbor nn;
@@ -254,8 +255,8 @@ namespace kgraph {
         return L;
     }
 
-    void GenerateControl (IndexOracle const &oracle, unsigned C, unsigned K, vector<Control> *pcontrols) {
-        vector<Control> controls(C);
+    void GenerateControl (IndexOracle const &oracle, unsigned C, unsigned K, vector<Control>& pcontrols) {
+        // auto controls = pcontrols;
         {
             vector<unsigned> index(oracle.size());
             int i = 0;
@@ -265,11 +266,11 @@ namespace kgraph {
             random_shuffle(index.begin(), index.end());
 #pragma omp parallel for
             for (unsigned i = 0; i < C; ++i) {
-                controls[i].id = index[i];
-                LinearSearch(oracle, index[i], K, &controls[i].neighbors);
+                pcontrols[i].id = index[i];
+                LinearSearch(oracle, index[i], K, &pcontrols[i].neighbors);
             }
         }
-        pcontrols->swap(controls);
+        // pcontrols->swap(controls);
     }
 
     static char const *KGRAPH_MAGIC = "KNNGRAPH";
@@ -280,6 +281,7 @@ namespace kgraph {
     protected:
         vector<unsigned> M;
         vector<vector<Neighbor>> graph;
+        vector<vector<uint32_t>> graph_only_ids;
         bool no_dist;   // Distance & flag information in Neighbor is not valid.
 
 
@@ -349,30 +351,51 @@ namespace kgraph {
                 }
                 return;
             }
-            ofstream os(path, ios::binary);
-            uint32_t N = graph.size();
-            os.write(KGRAPH_MAGIC, KGRAPH_MAGIC_SIZE);
-            os.write(reinterpret_cast<char const *>(&SIGNATURE_VERSION), sizeof(SIGNATURE_VERSION));
-            uint32_t sig_cap = format;
-            os.write(reinterpret_cast<char const *>(&sig_cap), sizeof(sig_cap));
-            os.write(reinterpret_cast<char const *>(&N), sizeof(N));
-            vector<unsigned> nids;
-            for (unsigned i = 0; i < graph.size(); ++i) {
-                auto const &knn = graph[i];
-                uint32_t K = knn.size();
-                os.write(reinterpret_cast<char const *>(&M[i]), sizeof(M[i]));
-                os.write(reinterpret_cast<char const *>(&K), sizeof(K));
-                if (format & FORMAT_NO_DIST) {
-                    nids.resize(K);
-                    for (unsigned k = 0; k < K; ++k) {
-                        nids[k] = knn[k].id;
-                    }
-                    os.write(reinterpret_cast<char const *>(&nids[0]), K * sizeof(nids[0]));
-                }
-                else {
-                    os.write(reinterpret_cast<char const *>(&knn[0]), K * sizeof(knn[0]));
-                }
+            ofstream os(path, ios::binary | ios::trunc);
+            // uint32_t N = graph.size();
+            // os.write(KGRAPH_MAGIC, KGRAPH_MAGIC_SIZE);
+            // os.write(reinterpret_cast<char const *>(&SIGNATURE_VERSION), sizeof(SIGNATURE_VERSION));
+            // uint32_t sig_cap = format;
+            // os.write(reinterpret_cast<char const *>(&sig_cap), sizeof(sig_cap));
+            // os.write(reinterpret_cast<char const *>(&N), sizeof(N));
+            // vector<unsigned> nids;
+            // std::cout << "graph number of neighbors: " << graph[0].size() << std::endl;
+            // std::cout << "graph number of neighbors: " << graph[1].size() << std::endl;
+            // int write_count = 0;
+            // std::cout << "graph_only_ids size(): " << graph_only_ids.size() << std::endl;
+            // for (unsigned i = 0; i < graph_only_ids.size(); ++i) {
+            //     auto const &knn = graph_only_ids[i];
+            //     uint32_t K = knn.size();
+            //     // os.write(reinterpret_cast<char const *>(&M[i]), sizeof(M[i]));
+            //     // os.write(reinterpret_cast<char const *>(&K), sizeof(K));
+            //     // if (format & FORMAT_NO_DIST) {
+            //     //     nids.resize(K);
+            //     //     for (unsigned k = 0; k < K; ++k) {
+            //     //         nids[k] = knn[k].id;
+            //     //     }
+            //         // os.write(reinterpret_cast<char const *>(&nids[0]), K * sizeof(nids[0]));
+            //     // }
+            //     // else {
+            //     // write_count += K;
+            //     // for (auto& x: knn) {
+            //     //     os.write(reinterpret_cast<char const *>(&x), sizeof(x));
+            //     // }
+            //     os.write(reinterpret_cast<char const *>(&knn[0]), K * sizeof(knn[0]));
+            //     // }
+            // }
+            const unsigned graphSize = graph.size();
+            const unsigned K = graph[0].size();
+            for (unsigned i = 0; i < graphSize; ++i) {
+                auto& knn = graph[i];
+                const int bufferSize = K * sizeof(uint32_t);
+                std::vector<uint32_t> buffer(knn.size());
+                std::transform(knn.begin(), knn.end(), buffer.begin(),
+                    [](auto const& x) { return x.id; });
+                os.write(reinterpret_cast<char const *>(buffer.data()), bufferSize);
             }
+            // std::cout << "write count: " << write_count << std::endl;
+            // os.seekp(0, std::ios::end);
+            // std::cout << "file size: " << os.tellp() << std::endl;
         }
 
         virtual void build (IndexOracle const &oracle, IndexParams const &param, IndexInfo *info);
@@ -588,6 +611,7 @@ namespace kgraph {
             for (unsigned i = 0; i < graph.size(); ++i) {
                 if (graph[i].size() > M[i]) {
                     graph[i].resize(M[i]);
+                    // graph_only_ids[i].resize(M[i]);
                 }
             }
         }
@@ -826,7 +850,7 @@ namespace kgraph {
             }
             n_comps += cc;
         }
-        void update () {
+inline  void update () {
             unsigned N = oracle.size();
             for (auto &nhood: nhoods) {
                 nhood.nn_new.clear();
@@ -903,6 +927,7 @@ public:
             boost::timer::cpu_timer timer;
             //params.check();
             unsigned N = oracle.size();
+            // graph_only_ids = std::vector<std::vector<uint32_t>>(N, std::vector<uint32_t>(100, 0));
             if (N <= params.K) throw runtime_error("K larger than dataset size");
             if (N < params.controls) {
                 cerr << "Warning: small dataset, shrinking control size to " << N << "." << endl;
@@ -917,9 +942,9 @@ public:
                 params.S = N - 1; 
             }
 
-            vector<Control> controls;
+            vector<Control> controls(params.controls);
             if (verbosity > 0) cerr << "Generating control..." << endl;
-            GenerateControl(oracle, params.controls, params.K, &controls);
+            GenerateControl(oracle, params.controls, params.K, controls);
             if (verbosity > 0) cerr << "Initializing..." << endl;
             // initialize nhoods
             init();
@@ -933,7 +958,6 @@ public:
             info.cost = 0;
             info.iterations = 0;
             info.delta = 1.0;
-
             for (unsigned it = 0; (params.iterations <= 0) || (it < params.iterations); ++it) {
                 ++info.iterations;
                 join();
@@ -983,27 +1007,38 @@ public:
                     info.stop_condition = IndexInfo::RECALL;
                     break;
                 }
-                update();
+                if (it < params.iterations) {
+                    update();
+                }
+                // update();
             }
+
+
             M.resize(N);
             graph.resize(N);
             if (params.prune > 2) throw runtime_error("prune level not supported.");
             for (unsigned n = 0; n < N; ++n) {
                 auto &knn = graph[n];
+                // auto &knn_id = graph_only_ids[n];
                 M[n] = nhoods[n].M;
                 auto const &pool = nhoods[n].pool;
                 unsigned K = params.L;
                 knn.resize(K);
+                knn.shrink_to_fit();
                 for (unsigned k = 0; k < K; ++k) {
+                    // knn_id[k] = pool[k].id;
                     knn[k].id = pool[k].id;
-                    knn[k].dist = pool[k].dist;
+                    // knn[k].dist = pool[k].dist;
                 }
             }
+            // std::cout << "Current graph only ids num: " << graph_only_ids.size() << std::endl;
             nhoods.clear();
             if (params.reverse) {
                 reverse(params.reverse);
+                std::cout << "Reversing graph..." << '\n';
             }
             if (params.prune) {
+                std::cout << "Pruning graph..." << '\n';
                 prune(o, params.prune);
             }
             if (pinfo) {
@@ -1017,6 +1052,7 @@ public:
         KGraphConstructor con(oracle, param, info);
         M.swap(con.M);
         graph.swap(con.graph);
+        // graph_only_ids.swap(con.graph_only_ids);
         std::swap(no_dist, con.no_dist);
     }
 
