@@ -73,6 +73,7 @@ namespace kgraph {
         float dist;
         bool flag;  // whether this entry is a newly found one
         Neighbor () {}
+        Neighbor (unsigned i): id(i) {}
         Neighbor (unsigned i, float d, bool f = true): id(i), dist(d), flag(f) {
         }
     };
@@ -179,7 +180,7 @@ namespace kgraph {
     //      return 0
     template <typename NeighborT>
     unsigned UpdateKnnListHelper (NeighborT *addr, unsigned K, NeighborT nn) {
-        // find the location to insert
+        // optimize with memmove
         unsigned j;
         unsigned i = K;
         while (i > 0) {
@@ -197,10 +198,12 @@ namespace kgraph {
         }
         // i <= K-1
         j = K;
-        while (j > i) {
-            addr[j] = addr[j-1];
-            --j;
-        }
+        // while (j > i) {
+        //     addr[j] = addr[j-1];
+        //     --j;
+        // }
+        std::memmove(addr + i + 1, addr + i, (j - i) * sizeof(NeighborT));
+
         addr[i] = nn;
         return i;
     }
@@ -212,6 +215,54 @@ namespace kgraph {
     static inline unsigned UpdateKnnList (NeighborX *addr, unsigned K, NeighborX nn) {
         return UpdateKnnListHelper<NeighborX>(addr, K, nn);
     }
+
+    // The neighborhood structure maintains a pool of near neighbors of an object.
+    // The neighbors are stored in the pool.  "n" (<="params.L") is the number of valid entries
+    // in the pool, with the beginning "k" (<="n") entries sorted.
+    struct Nhood { // neighborhood
+        Lock lock;
+        float radius;   // distance of interesting range
+        float radiusM;
+        Neighbors pool;
+        unsigned L;     // # valid items in the pool,  L + 1 <= pool.size()
+        unsigned M;     // we only join items in pool[0..M)
+        bool found;     // helped found new NN in this round
+        vector<unsigned> nn_old;
+        vector<unsigned> nn_new;
+        vector<unsigned> rnn_old;
+        vector<unsigned> rnn_new;
+
+        // only non-readonly method which is supposed to be called in parallel
+        unsigned parallel_try_insert (unsigned id, float dist) {
+            if (dist > radius) return pool.size();
+            LockGuard guard(lock);
+            unsigned l = UpdateKnnList(&pool[0], L, Neighbor(id, dist, true));
+            if (l <= L) { // inserted
+                if (L + 1 < pool.size()) { // if l == L + 1, there's a duplicate
+                    ++L;
+                }
+                else {
+                    radius = pool[L-1].dist;
+                }
+            }
+            return l;
+        }
+
+        // join should not be conflict with insert
+        template <typename C>
+        void join (C callback) const {
+            for (unsigned const i: nn_new) {
+                for (unsigned const j: nn_new) {
+                    if (i < j) {
+                        callback(i, j);
+                    }
+                }
+                for (unsigned j: nn_old) {
+                    callback(i, j);
+                }
+            }
+        }
+    };
 
 inline  void LinearSearch (IndexOracle const &oracle, unsigned i, unsigned K, vector<Neighbor> *pnns) {
         vector<Neighbor> nns(K+1);
@@ -281,7 +332,8 @@ inline  void LinearSearch (IndexOracle const &oracle, unsigned i, unsigned K, ve
     protected:
         vector<unsigned> M;
         vector<vector<Neighbor>> graph;
-        vector<vector<uint32_t>> graph_only_ids;
+        vector<Nhood> nhoods;
+        // vector<vector<uint32_t>> graph_only_ids;
         bool no_dist;   // Distance & flag information in Neighbor is not valid.
 
 
@@ -383,12 +435,14 @@ inline  void LinearSearch (IndexOracle const &oracle, unsigned i, unsigned K, ve
             //     os.write(reinterpret_cast<char const *>(&knn[0]), K * sizeof(knn[0]));
             //     // }
             // }
-            const unsigned graphSize = graph.size();
-            const unsigned K = graph[0].size();
+            const unsigned graphSize = nhoods.size();
+            // const unsigned graphSize = graph.size();
+            const unsigned K = 100;
+            std::vector<uint32_t> buffer(K);
             for (unsigned i = 0; i < graphSize; ++i) {
-                auto& knn = graph[i];
+                auto& knn = nhoods[i].pool;
+                // auto& knn = graph[i];
                 const int bufferSize = K * sizeof(uint32_t);
-                std::vector<uint32_t> buffer(knn.size());
                 std::transform(knn.begin(), knn.end(), buffer.begin(),
                     [](auto const& x) { return x.id; });
                 os.write(reinterpret_cast<char const *>(buffer.data()), bufferSize);
@@ -740,58 +794,59 @@ inline  void LinearSearch (IndexOracle const &oracle, unsigned i, unsigned K, ve
     };
 
     class KGraphConstructor: public KGraphImpl {
-        // The neighborhood structure maintains a pool of near neighbors of an object.
-        // The neighbors are stored in the pool.  "n" (<="params.L") is the number of valid entries
-        // in the pool, with the beginning "k" (<="n") entries sorted.
-        struct Nhood { // neighborhood
-            Lock lock;
-            float radius;   // distance of interesting range
-            float radiusM;
-            Neighbors pool;
-            unsigned L;     // # valid items in the pool,  L + 1 <= pool.size()
-            unsigned M;     // we only join items in pool[0..M)
-            bool found;     // helped found new NN in this round
-            vector<unsigned> nn_old;
-            vector<unsigned> nn_new;
-            vector<unsigned> rnn_old;
-            vector<unsigned> rnn_new;
+        // // The neighborhood structure maintains a pool of near neighbors of an object.
+        // // The neighbors are stored in the pool.  "n" (<="params.L") is the number of valid entries
+        // // in the pool, with the beginning "k" (<="n") entries sorted.
+        // struct Nhood { // neighborhood
+        //     Lock lock;
+        //     float radius;   // distance of interesting range
+        //     float radiusM;
+        //     Neighbors pool;
+        //     unsigned L;     // # valid items in the pool,  L + 1 <= pool.size()
+        //     unsigned M;     // we only join items in pool[0..M)
+        //     bool found;     // helped found new NN in this round
+        //     vector<unsigned> nn_old;
+        //     vector<unsigned> nn_new;
+        //     vector<unsigned> rnn_old;
+        //     vector<unsigned> rnn_new;
 
-            // only non-readonly method which is supposed to be called in parallel
-            unsigned parallel_try_insert (unsigned id, float dist) {
-                if (dist > radius) return pool.size();
-                LockGuard guard(lock);
-                unsigned l = UpdateKnnList(&pool[0], L, Neighbor(id, dist, true));
-                if (l <= L) { // inserted
-                    if (L + 1 < pool.size()) { // if l == L + 1, there's a duplicate
-                        ++L;
-                    }
-                    else {
-                        radius = pool[L-1].dist;
-                    }
-                }
-                return l;
-            }
+        //     // only non-readonly method which is supposed to be called in parallel
+        //     unsigned parallel_try_insert (unsigned id, float dist) {
+        //         if (dist > radius) return pool.size();
+        //         LockGuard guard(lock);
+        //         unsigned l = UpdateKnnList(&pool[0], L, Neighbor(id, dist, true));
+        //         if (l <= L) { // inserted
+        //             if (L + 1 < pool.size()) { // if l == L + 1, there's a duplicate
+        //                 ++L;
+        //             }
+        //             else {
+        //                 radius = pool[L-1].dist;
+        //             }
+        //         }
+        //         return l;
+        //     }
 
-            // join should not be conflict with insert
-            template <typename C>
-            void join (C callback) const {
-                for (unsigned const i: nn_new) {
-                    for (unsigned const j: nn_new) {
-                        if (i < j) {
-                            callback(i, j);
-                        }
-                    }
-                    for (unsigned j: nn_old) {
-                        callback(i, j);
-                    }
-                }
-            }
-        };
-
+        //     // join should not be conflict with insert
+        //     template <typename C>
+        //     void join (C callback) const {
+        //         for (unsigned const i: nn_new) {
+        //             for (unsigned const j: nn_new) {
+        //                 if (i < j) {
+        //                     callback(i, j);
+        //                 }
+        //             }
+        //             for (unsigned j: nn_old) {
+        //                 callback(i, j);
+        //             }
+        //         }
+        //     }
+        // };
+public:
+        vector<Nhood> nhoods;
+private:        
         IndexOracle const &oracle;
         IndexParams params;
         IndexInfo *pinfo;
-        vector<Nhood> nhoods;
         size_t n_comps;
 
         void init () {
@@ -800,7 +855,7 @@ inline  void LinearSearch (IndexOracle const &oracle, unsigned i, unsigned K, ve
             mt19937 rng(seed);
             for (auto &nhood: nhoods) {
                 nhood.nn_new.resize(params.S * 2);
-                nhood.pool.resize(params.L+1);
+                nhood.pool.resize(params.L + 1);
                 nhood.radius = numeric_limits<float>::max();
             }
 #pragma omp parallel
@@ -815,7 +870,7 @@ inline  void LinearSearch (IndexOracle const &oracle, unsigned i, unsigned K, ve
                 for (unsigned n = 0; n < N; ++n) {
                     auto &nhood = nhoods[n];
                     Neighbors &pool = nhood.pool;
-                    GenRandom(rng, &nhood.nn_new[0], nhood.nn_new.size(), N);
+                    GenRandom(rng, &nhood.nn_new[0], nhood.nn_new.size(), N); // at the beginning all random
                     GenRandom(rng, &random[0], random.size(), N);
                     nhood.L = params.S;
                     nhood.M = params.S;
@@ -852,6 +907,8 @@ inline  void LinearSearch (IndexOracle const &oracle, unsigned i, unsigned K, ve
         }
 inline  void update () {
             unsigned N = oracle.size();
+
+#pragma omp parallel for
             for (auto &nhood: nhoods) {
                 nhood.nn_new.clear();
                 nhood.nn_old.clear();
@@ -875,6 +932,7 @@ inline  void update () {
                 }
                 BOOST_VERIFY(nhood.M > 0);
                 nhood.radiusM = nhood.pool[nhood.M-1].dist;
+                // nhood.radiusM = nhood.pool.back().dist;
             }
 #pragma omp parallel for
             for (unsigned n = 0; n < N; ++n) {
@@ -886,9 +944,9 @@ inline  void update () {
                     auto &nhood_o = nhoods[nn.id];  // nhood on the other side of the edge
                     if (nn.flag) {
                         nn_new.push_back(nn.id);
-                        if (nn.dist > nhood_o.radiusM) {
+                        if (nn.dist > nhood_o.radiusM) { // maybe detect valuable neighbor via radiusM
                             LockGuard guard(nhood_o.lock);
-                            nhood_o.rnn_new.push_back(n);
+                            nhood_o.rnn_new.push_back(n); // undirected, add both
                         }
                         nn.flag = false;
                     }
@@ -1012,27 +1070,33 @@ public:
                 }
                 // update();
             }
+            // std::cout << "check point finish iter" << '\n';
 
 
-            M.resize(N);
-            graph.resize(N);
-            if (params.prune > 2) throw runtime_error("prune level not supported.");
-            for (unsigned n = 0; n < N; ++n) {
-                auto &knn = graph[n];
-                // auto &knn_id = graph_only_ids[n];
-                M[n] = nhoods[n].M;
-                auto const &pool = nhoods[n].pool;
-                unsigned K = params.L;
-                knn.resize(K);
-                knn.shrink_to_fit();
-                for (unsigned k = 0; k < K; ++k) {
-                    // knn_id[k] = pool[k].id;
-                    knn[k].id = pool[k].id;
-                    // knn[k].dist = pool[k].dist;
-                }
-            }
-            // std::cout << "Current graph only ids num: " << graph_only_ids.size() << std::endl;
-            nhoods.clear();
+            // M.resize(N);
+            // graph.resize(N);
+            // std::cout << "check point finish resize" << '\n';
+
+            graph.clear();
+//             if (params.prune > 2) throw runtime_error("prune level not supported.");
+// #pragma omp parallel for
+//             for (unsigned n = 0; n < N; ++n) {
+//                 auto &knn = graph[n];
+//                 M[n] = nhoods[n].M;
+//                 auto const &pool = nhoods[n].pool;
+//                 nhoods[n].nn_new.clear();
+//                 nhoods[n].nn_old.clear();
+//                 nhoods[n].rnn_new.clear();
+//                 nhoods[n].rnn_old.clear();
+//                 unsigned K = params.K;
+//                 knn.resize(K);
+//                 std::transform(pool.begin(), pool.begin() + K, knn.begin(), [](const auto& p) {
+//                     return Neighbor{p.id};
+//                 });
+//                 nhoods[n].pool.clear();
+//             }
+            // nhoods.clear();
+            std::cout << "check point copy node id" << '\n';
             if (params.reverse) {
                 reverse(params.reverse);
                 std::cout << "Reversing graph..." << '\n';
@@ -1051,8 +1115,10 @@ public:
     void KGraphImpl::build (IndexOracle const &oracle, IndexParams const &param, IndexInfo *info) {
         KGraphConstructor con(oracle, param, info);
         M.swap(con.M);
-        graph.swap(con.graph);
+        // graph.swap(con.graph);
+        nhoods.swap(con.nhoods);
         // graph_only_ids.swap(con.graph_only_ids);
+        std::cout << "Current nhoods size: " << nhoods.size() << std::endl;
         std::swap(no_dist, con.no_dist);
     }
 
