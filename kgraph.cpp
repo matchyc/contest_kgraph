@@ -250,7 +250,7 @@ namespace kgraph {
 
         // join should not be conflict with insert
         template <typename C>
-        void join (C callback) const {
+    inline void join (C callback) const {
             for (unsigned const i: nn_new) {
                 for (unsigned const j: nn_new) {
                     if (i < j) {
@@ -959,21 +959,28 @@ inline  void update () {
                     }
                 }
             }
+#pragma omp parallel for
             for (unsigned i = 0; i < N; ++i) {
                 auto &nn_new = nhoods[i].nn_new;
                 auto &nn_old = nhoods[i].nn_old;
                 auto &rnn_new = nhoods[i].rnn_new;
                 auto &rnn_old = nhoods[i].rnn_old;
-                if (params.R && (rnn_new.size() > params.R)) {
-                    random_shuffle(rnn_new.begin(), rnn_new.end());
+
+                // nn_new.reserve(nn_new.size() + params.R);
+                // nn_old.reserve(nn_old.size() + params.R);
+
+                if ((rnn_new.size() > params.R)) {
+                    std::shuffle(rnn_new.begin(), rnn_new.end(), std::default_random_engine(std::random_device{}()));
                     rnn_new.resize(params.R);
                 }
-                nn_new.insert(nn_new.end(), rnn_new.begin(), rnn_new.end());
-                if (params.R && (rnn_old.size() > params.R)) {
-                    random_shuffle(rnn_old.begin(), rnn_old.end());
+
+                if ((rnn_old.size() > params.R)) {
+                    std::shuffle(rnn_old.begin(), rnn_old.end(), std::default_random_engine(std::random_device{}()));
                     rnn_old.resize(params.R);
                 }
-                nn_old.insert(nn_old.end(), rnn_old.begin(), rnn_old.end());
+
+                nn_new.insert(nn_new.end(), std::make_move_iterator(rnn_new.begin()), std::make_move_iterator(rnn_new.end()));
+                nn_old.insert(nn_old.end(), std::make_move_iterator(rnn_old.begin()), std::make_move_iterator(rnn_old.end()));
             }
         }
 
@@ -1016,6 +1023,7 @@ public:
             info.cost = 0;
             info.iterations = 0;
             info.delta = 1.0;
+            graph.clear();
             for (unsigned it = 0; (params.iterations <= 0) || (it < params.iterations); ++it) {
                 ++info.iterations;
                 join();
@@ -1077,8 +1085,7 @@ public:
             // graph.resize(N);
             // std::cout << "check point finish resize" << '\n';
 
-            graph.clear();
-//             if (params.prune > 2) throw runtime_error("prune level not supported.");
+            // if (params.prune > 2) throw runtime_error("prune level not supported.");
 // #pragma omp parallel for
 //             for (unsigned n = 0; n < N; ++n) {
 //                 auto &knn = graph[n];
