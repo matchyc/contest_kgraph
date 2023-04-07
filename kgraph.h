@@ -7,6 +7,7 @@
 
 #ifndef WDONG_KGRAPH
 #define WDONG_KGRAPH
+#define MAX_N 10000000
 
 #include <stdexcept>
 

@@ -44,49 +44,34 @@ float avx512_l2_distance(float const * a, float const * b, unsigned n) {
   const int kFloatsPerVec = 16;
   __m512 sum1 = _mm512_setzero_ps();
   __m512 sum2 = _mm512_setzero_ps();
-  __m512 sum3 = _mm512_setzero_ps();
-  __m512 sum4 = _mm512_setzero_ps();
-  int i = 0;
-  for (; i + 4 * kFloatsPerVec <= n; i += 4 * kFloatsPerVec) {
-    // Load four sets of 16 floats from a and b with aligned memory access
+  
+  // Process 32 floats at once
+  for (int i = 0; i + 2*kFloatsPerVec <= n; i += 2*kFloatsPerVec) {
+    // Load two sets of 32 floats from a and b with aligned memory access
     __m512 a_vec1 = _mm512_load_ps(&a[i]);
     __m512 a_vec2 = _mm512_load_ps(&a[i + kFloatsPerVec]);
-    __m512 a_vec3 = _mm512_load_ps(&a[i + 2 * kFloatsPerVec]);
-    __m512 a_vec4 = _mm512_load_ps(&a[i + 3 * kFloatsPerVec]);
     __m512 b_vec1 = _mm512_load_ps(&b[i]);
     __m512 b_vec2 = _mm512_load_ps(&b[i + kFloatsPerVec]);
-    __m512 b_vec3 = _mm512_load_ps(&b[i + 2 * kFloatsPerVec]);
-    __m512 b_vec4 = _mm512_load_ps(&b[i + 3 * kFloatsPerVec]);
 
-    // Calculate difference and square the result
+    // Calculate difference and square the result using fused multiply-add
     __m512 diff1 = _mm512_sub_ps(a_vec1, b_vec1);
+    __m512 squared1 = _mm512_fmadd_ps(diff1, diff1, sum1);
+    sum1 = squared1;
     __m512 diff2 = _mm512_sub_ps(a_vec2, b_vec2);
-    __m512 diff3 = _mm512_sub_ps(a_vec3, b_vec3);
-    __m512 diff4 = _mm512_sub_ps(a_vec4, b_vec4);
-    __m512 squared1 = _mm512_mul_ps(diff1, diff1);
-    __m512 squared2 = _mm512_mul_ps(diff2, diff2);
-    __m512 squared3 = _mm512_mul_ps(diff3, diff3);
-    __m512 squared4 = _mm512_mul_ps(diff4, diff4);
-
-    // Accumulate the results in four separate sum vectors
-    sum1 = _mm512_add_ps(sum1, squared1);
-    sum2 = _mm512_add_ps(sum2, squared2);
-    sum3 = _mm512_add_ps(sum3, squared3);
-    sum4 = _mm512_add_ps(sum4, squared4);
+    __m512 squared2 = _mm512_fmadd_ps(diff2, diff2, sum2);
+    sum2 = squared2;
   }
 
-  // Combine the four sum vectors to a single sum vector
+  // Combine the two sum vectors to a single sum vector
   __m512 sum12 = _mm512_add_ps(sum1, sum2);
-  __m512 sum34 = _mm512_add_ps(sum3, sum4);
-  __m512 sum1234 = _mm512_add_ps(sum12, sum34);
 
   float result = 0;
   // Sum the remaining floats in the sum vector using non-vectorized operations
   for (int j = 0; j < kFloatsPerVec; j++) {
-    result += ((float*)&sum1234)[j];
+    result += ((float*)&sum12)[j];
   }
   // Process the remaining elements with non-vectorized operations
-  for (; i < n; i++) {
+  for (int i = n - (n % kFloatsPerVec); i < n; i++) {
     float diff = a[i] - b[i];
     result += diff * diff;
   }
@@ -114,40 +99,79 @@ float avx512_l2_distance(float const * a, float const * b, unsigned n) {
 //     }
 //     return sqrtf(result); // Return square root of sum
 // }
+    float float_l2sqr_avx (float const *t1, float const *t2, unsigned dim) {
+        __m256 sum;
+        __m256 l0, l1, l2, l3;
+        __m256 r0, r1, r2, r3;
+        unsigned D = (dim + 7) & ~7U; // # dim aligned up to 256 bits, or 8 floats
+        unsigned DR = D % 32;
+        unsigned DD = D - DR;
+        const float *l = t1;
+        const float *r = t2;
+        const float *e_l = l + DD;
+        const float *e_r = r + DD;
+        float unpack[8] __attribute__ ((aligned (32))) = {0, 0, 0, 0, 0, 0, 0, 0};
+        float ret = 0.0;
+        sum = _mm256_load_ps(unpack);
+        switch (DR) {
+            case 24:
+                AVX_L2SQR(e_l+16, e_r+16, sum, l2, r2);
+            case 16:
+                AVX_L2SQR(e_l+8, e_r+8, sum, l1, r1);
+            case 8:
+                AVX_L2SQR(e_l, e_r, sum, l0, r0);
+        }
+        for (unsigned i = 0; i < DD; i += 32, l += 32, r += 32) {
+            AVX_L2SQR(l, r, sum, l0, r0);
+            AVX_L2SQR(l + 8, r + 8, sum, l1, r1);
+            AVX_L2SQR(l + 16, r + 16, sum, l2, r2);
+            AVX_L2SQR(l + 24, r + 24, sum, l3, r3);
+        }
+        _mm256_storeu_ps(unpack, sum);
+        ret = unpack[0] + unpack[1] + unpack[2] + unpack[3]
+            + unpack[4] + unpack[5] + unpack[6] + unpack[7];
+        return ret;//sqrt(ret);
+    }
 
-float float_l2sqr_avx (float const *t1, float const *t2, unsigned dim) {
-    __m256 sum;
-    __m256 l0, l1, l2, l3;
-    __m256 r0, r1, r2, r3;
-    unsigned D = (dim + 7) & ~7U; // # dim aligned up to 256 bits, or 8 floats
-    unsigned DR = D % 32;
-    unsigned DD = D - DR;
-    const float *l = t1;
-    const float *r = t2;
-    const float *e_l = l + DD;
-    const float *e_r = r + DD;
-    float unpack[8] __attribute__ ((aligned (32))) = {0, 0, 0, 0, 0, 0, 0, 0};
-    float ret = 0.0;
-    sum = _mm256_load_ps(unpack);
-    switch (DR) {
-        case 24:
-            AVX_L2SQR(e_l+16, e_r+16, sum, l2, r2);
-        case 16:
-            AVX_L2SQR(e_l+8, e_r+8, sum, l1, r1);
-        case 8:
-            AVX_L2SQR(e_l, e_r, sum, l0, r0);
+    float float_l2sqr_avx_opt(float const* t1, float const* t2, unsigned dim) {
+        __m256 sum1 = _mm256_setzero_ps();
+        __m256 sum2 = _mm256_setzero_ps();
+        __m256 sum3 = _mm256_setzero_ps();
+        __m256 sum4 = _mm256_setzero_ps();
+
+        // Process 4 vectors (32 floats) per iteration
+        for (unsigned i = 0; i < dim; i += 32) {
+            __m256 a1 = _mm256_load_ps(t1 + i);
+            __m256 b1 = _mm256_load_ps(t2 + i);
+            __m256 c1 = _mm256_sub_ps(a1, b1);
+            sum1 = _mm256_fmadd_ps(c1, c1, sum1);
+
+            __m256 a2 = _mm256_load_ps(t1 + i + 8);
+            __m256 b2 = _mm256_load_ps(t2 + i + 8);
+            __m256 c2 = _mm256_sub_ps(a2, b2);
+            sum2 = _mm256_fmadd_ps(c2, c2, sum2);
+
+            __m256 a3 = _mm256_load_ps(t1 + i + 16);
+            __m256 b3 = _mm256_load_ps(t2 + i + 16);
+            __m256 c3 = _mm256_sub_ps(a3, b3);
+            sum3 = _mm256_fmadd_ps(c3, c3, sum3);
+
+            __m256 a4 = _mm256_load_ps(t1 + i + 24);
+            __m256 b4 = _mm256_load_ps(t2 + i + 24);
+            __m256 c4 = _mm256_sub_ps(a4, b4);
+            sum4 = _mm256_fmadd_ps(c4, c4, sum4);
+        }
+
+        // Accumulate into separate AVX lanes
+        __m256 sum12 = _mm256_hadd_ps(sum1, sum2);
+        __m256 sum34 = _mm256_hadd_ps(sum3, sum4);
+        __m256 sum1234 = _mm256_hadd_ps(sum12, sum34);
+
+        // Sum up all 8 elements
+        float res = _mm256_cvtss_f32(_mm256_hadd_ps(sum1234, sum1234));
+
+        return res;
     }
-    for (unsigned i = 0; i < DD; i += 32, l += 32, r += 32) {
-        AVX_L2SQR(l, r, sum, l0, r0);
-        AVX_L2SQR(l + 8, r + 8, sum, l1, r1);
-        AVX_L2SQR(l + 16, r + 16, sum, l2, r2);
-        AVX_L2SQR(l + 24, r + 24, sum, l3, r3);
-    }
-    _mm256_storeu_ps(unpack, sum);
-    ret = unpack[0] + unpack[1] + unpack[2] + unpack[3]
-        + unpack[4] + unpack[5] + unpack[6] + unpack[7];
-    return ret;//sqrt(ret);
-}
 }
 #endif
 #ifdef __SSE2__

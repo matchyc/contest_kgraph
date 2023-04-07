@@ -14,6 +14,7 @@
 #ifdef __GNUC__
 #ifdef __AVX__
 #define KGRAPH_MATRIX_ALIGN 32
+// #define KGRAPH_MATRIX_ALIGN 64
 #else
 #ifdef __SSE2__
 #define KGRAPH_MATRIX_ALIGN 16
@@ -28,6 +29,7 @@ namespace kgraph {
     /// L2 square distance with AVX instructions.
     /** AVX instructions have strong alignment requirement for t1 and t2.
      */
+    extern float float_l2sqr_avx_opt(float const* t1, float const* t2, unsigned dim);
     extern float float_l2sqr_avx (float const *t1, float const *t2, unsigned dim);
     extern float avx512_l2_distance(float const* a, float const* b, unsigned n);
     /// L2 square distance with SSE2 instructions.
@@ -110,7 +112,7 @@ namespace kgraph {
             // data = (char *)memalign(A, row * stride); // SSE instruction needs data to be aligned
             data = (char *)mi_aligned_alloc(A, row * stride); // SSE instruction needs data to be aligned
             if (!data) throw runtime_error("memalign");
-            std::cout << "Read data: num_pts = " << row << "stride = " << stride << "\n";
+            std::cout << "Read data: num_pts = " << row << " aligned_space = " << stride << "\n";
         }
     public:
         Matrix (): col(0), row(0), stride(0), data(0) {}
@@ -334,7 +336,8 @@ namespace kgraph { namespace metric {
         template <>
         inline float l2sqr::apply<float> (float const *t1, float const *t2, unsigned dim) {
             // std::cout << "use avx distance" << std::endl;
-            return float_l2sqr_avx(t1, t2, dim);
+            // return float_l2sqr_avx(t1, t2, dim);
+            return float_l2sqr_avx_opt(t1, t2, dim);
             // return avx512_l2_distance(t1, t2, dim);
         }
 }}

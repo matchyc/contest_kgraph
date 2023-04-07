@@ -44,19 +44,23 @@ namespace kgraph {
     typedef boost::detail::spinlock Lock;
     typedef std::lock_guard<Lock> LockGuard;
 
-    // // generate size distinct random numbers < N
-    template <typename RNG>
+    // generate size distinct random numbers < N
+    template <typename RNG, unsigned BN = MAX_N>
     static void GenRandom(RNG& rng, unsigned* addr, unsigned size, unsigned N) {
         if (N == size) {
             std::iota(addr, addr + size, 0);
             return;
         }
-        std::uniform_int_distribution<unsigned> dist(0, N - 1); // create a uniform distribution
-        std::unordered_set<unsigned> nums;
-        while (nums.size() < size) {
-            nums.insert(dist(rng));
+        std::uniform_int_distribution<unsigned> dist(0, N - 1);
+        std::bitset<BN> bs;
+        unsigned count = 0;
+        while (count < size) {
+            unsigned val = dist(rng);
+            if (!bs[val]) {
+                bs.set(val);
+                addr[count++] = val;
+            }
         }
-        std::copy(nums.begin(), nums.end(), addr);
     }
     // template <typename RNG>
     // static void GenRandom (RNG &rng, unsigned *addr, unsigned size, unsigned N) {
@@ -64,6 +68,7 @@ namespace kgraph {
     //         std::iota(addr, addr + size, 0);
     //         return;
     //     }
+    //     // std::uniform_int_distribution<unsigned> dist(0, N - 1);
     //     for (unsigned i = 0; i < size; ++i) {
     //         addr[i] = rng() % (N - size);
     //     }
@@ -961,6 +966,7 @@ inline  void update (unsigned& inter_count) {
                         nn_new.push_back(nn.id);
                         if (nn.dist > nhood_o.radiusM) { // maybe detect valuable neighbor via radiusM
                             LockGuard guard(nhood_o.lock);
+                            // nhood_o.nn_new.push_back(n);
                             nhood_o.rnn_new.push_back(n); // undirected, add both
                         }
                         nn.flag = false;
@@ -969,13 +975,16 @@ inline  void update (unsigned& inter_count) {
                         nn_old.push_back(nn.id);
                         if (nn.dist > nhood_o.radiusM) {
                             LockGuard guard(nhood_o.lock);
+                            // nhood_o.nn_old.push_back(n);
                             nhood_o.rnn_old.push_back(n);
                         }
                     }
                 }
             }
+            std::random_device rd;
 #pragma omp parallel for
             for (unsigned i = 0; i < N; ++i) {
+                thread_local std::default_random_engine rng(rd());
                 auto &nn_new = nhoods[i].nn_new;
                 auto &nn_old = nhoods[i].nn_old;
                 auto &rnn_new = nhoods[i].rnn_new;
@@ -985,12 +994,12 @@ inline  void update (unsigned& inter_count) {
                 // nn_old.reserve(nn_old.size() + params.R);
 
                 if ((rnn_new.size() > params.R)) {
-                    std::shuffle(rnn_new.begin(), rnn_new.end(), std::default_random_engine(std::random_device{}()));
+                    std::shuffle(rnn_new.begin(), rnn_new.end(), rng);
                     rnn_new.resize(params.R);
                 }
 
                 if ((rnn_old.size() > params.R)) {
-                    std::shuffle(rnn_old.begin(), rnn_old.end(), std::default_random_engine(std::random_device{}()));
+                    std::shuffle(rnn_old.begin(), rnn_old.end(), rng);
                     rnn_old.resize(params.R);
                 }
 
@@ -1020,6 +1029,10 @@ public:
             if (N <= params.S) {
                 cerr << "Warning: small dataset, shrinking S to " << (N-1) << "." << endl;
                 params.S = N - 1; 
+            }
+            if (params.L < params.S) {
+                cerr << "Warning: L smaller than S, setting L to S." << endl;
+                params.L = params.S;
             }
 
             vector<Control> controls(params.controls);
