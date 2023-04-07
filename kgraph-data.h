@@ -329,7 +329,7 @@ namespace kgraph {
 #ifndef KGRAPH_NO_VECTORIZE
 #ifdef __GNUC__
 #ifdef __AVX__
-#if 0
+#if 1
 namespace kgraph { namespace metric {
         template <>
         inline float l2sqr::apply<float> (float const *t1, float const *t2, unsigned dim) {

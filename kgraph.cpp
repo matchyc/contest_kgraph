@@ -44,29 +44,40 @@ namespace kgraph {
     typedef boost::detail::spinlock Lock;
     typedef std::lock_guard<Lock> LockGuard;
 
-    // generate size distinct random numbers < N
+    // // generate size distinct random numbers < N
     template <typename RNG>
-    static void GenRandom (RNG &rng, unsigned *addr, unsigned size, unsigned N) {
+    static void GenRandom(RNG& rng, unsigned* addr, unsigned size, unsigned N) {
         if (N == size) {
-            for (unsigned i = 0; i < size; ++i) {
-                addr[i] = i;
-            }
+            std::iota(addr, addr + size, 0);
             return;
         }
-        for (unsigned i = 0; i < size; ++i) {
-            addr[i] = rng() % (N - size);
+        std::uniform_int_distribution<unsigned> dist(0, N - 1); // create a uniform distribution
+        std::unordered_set<unsigned> nums;
+        while (nums.size() < size) {
+            nums.insert(dist(rng));
         }
-        sort(addr, addr + size);
-        for (unsigned i = 1; i < size; ++i) {
-            if (addr[i] <= addr[i-1]) {
-                addr[i] = addr[i-1] + 1;
-            }
-        }
-        unsigned off = rng() % N;
-        for (unsigned i = 0; i < size; ++i) {
-            addr[i] = (addr[i] + off) % N;
-        }
+        std::copy(nums.begin(), nums.end(), addr);
     }
+    // template <typename RNG>
+    // static void GenRandom (RNG &rng, unsigned *addr, unsigned size, unsigned N) {
+    //     if (N == size) {
+    //         std::iota(addr, addr + size, 0);
+    //         return;
+    //     }
+    //     for (unsigned i = 0; i < size; ++i) {
+    //         addr[i] = rng() % (N - size);
+    //     }
+    //     sort(addr, addr + size);
+    //     for (unsigned i = 1; i < size; ++i) {
+    //         if (addr[i] <= addr[i-1]) {
+    //             addr[i] = addr[i-1] + 1;
+    //         }
+    //     }
+    //     unsigned off = rng() % N;
+    //     for (unsigned i = 0; i < size; ++i) {
+    //         addr[i] = (addr[i] + off) % N;
+    //     }
+    // }
 
     struct Neighbor {
         uint32_t id;
@@ -858,12 +869,15 @@ private:
                 nhood.pool.resize(params.L + 1);
                 nhood.radius = numeric_limits<float>::max();
             }
+            std::random_device rd;
 #pragma omp parallel
             {
 #ifdef _OPENMP
-                mt19937 rng(seed ^ omp_get_thread_num());
+                // mt19937 rng(seed ^ omp_get_thread_num());
+                thread_local mt19937 rng(rd());
 #else
-                mt19937 rng(seed);
+                mt19937 rng(rd());
+                // mt19937 rng(seed);
 #endif
                 vector<unsigned> random(params.S + 1);
 #pragma omp for
@@ -905,7 +919,7 @@ private:
             }
             n_comps += cc;
         }
-inline  void update () {
+inline  void update (unsigned& inter_count) {
             unsigned N = oracle.size();
 
 #pragma omp parallel for
@@ -932,7 +946,8 @@ inline  void update () {
                 }
                 BOOST_VERIFY(nhood.M > 0);
                 nhood.radiusM = nhood.pool[nhood.M-1].dist;
-                // nhood.radiusM = nhood.pool.back().dist;
+                // nhood.radiusM = nhood.pool[25].dist;
+                
             }
 #pragma omp parallel for
             for (unsigned n = 0; n < N; ++n) {
@@ -1074,7 +1089,7 @@ public:
                     break;
                 }
                 if (it < params.iterations) {
-                    update();
+                    update(info.iterations);
                 }
                 // update();
             }
