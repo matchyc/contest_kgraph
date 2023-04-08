@@ -88,7 +88,7 @@ namespace kgraph {
         uint32_t id;
         float dist;
         bool flag;  // whether this entry is a newly found one
-        Neighbor () {}
+        Neighbor () {dist = 0; id = 0; flag = false;}
         Neighbor (unsigned i): id(i) {}
         Neighbor (unsigned i, float d, bool f = true): id(i), dist(d), flag(f) {
         }
@@ -407,6 +407,7 @@ inline  void LinearSearch (IndexOracle const &oracle, unsigned i, unsigned K, ve
     public:
         virtual ~KGraphImpl () {
         }
+
         virtual void load (char const *path) {
             static_assert(sizeof(unsigned) == sizeof(uint32_t), "unsigned must be 32-bit");
             ifstream is(path, ios::binary);
@@ -904,7 +905,72 @@ inline  void LinearSearch (IndexOracle const &oracle, unsigned i, unsigned K, ve
         //     }
         // };
 public:
+        void load_nn_graph (char const *path, uint32_t& K) {
+            std::ifstream in(path, std::ios::binary);
+            // unsigned k;
+            // in.read((char*)&k,4);
+            in.seekg(0,std::ios::end);
+            std::ios::pos_type ss = in.tellg();
+            size_t fsize = (size_t)ss;
+            size_t num = fsize / ((size_t)K) / 4;
+            in.seekg(0,std::ios::beg);
+            id_graph.resize(num);
+            for(size_t i = 0; i < num; i++){
+                // id_graph[i].reserve(K);
+                id_graph[i].resize(K);
+                in.read((char*)id_graph[i].data(), K * sizeof(unsigned));
+            }
+            std::cout << "Load pre NN graph: " << id_graph.size() << "nn: " << id_graph[0].size() << std::endl;
+            in.close();
+        }
+
+        void prepare_nhoods() {
+            unsigned N = oracle.size();
+            // todo: init nhoods size
+            for (auto &nhood: nhoods) {
+                nhood.nn_new.resize(params.S * 2);
+                nhood.pool.resize(params.L + 1);
+                nhood.radius = numeric_limits<float>::max();
+            }
+            const uint32_t K = params.K;
+            BOOST_VERIFY(K == id_graph[0].size());
+            std::random_device rd;
+#pragma omp parallel for schedule(dynamic, 1)
+            for (uint32_t i = 0; i < N; ++i) {
+                thread_local mt19937 rng(rd());
+                std::vector<uint32_t> &nn = id_graph[i];
+                auto& nhood = nhoods[i];
+                auto& pool = nhood.pool;
+                nhood.L = params.S;
+                nhood.M = params.S;
+                std::vector<uint32_t> random(pool.size() - K);
+                GenRandom(rng, &nhood.nn_new[0], nhood.nn_new.size(), N);
+                GenRandom(rng, &random[0], random.size(), N);
+                for (uint32_t p = 0; p < nhood.L; ++p) {
+                    if (p < K) {
+                        auto& cur_id = nn[p];
+                        if (cur_id == i) { //self
+                            continue;
+                        }
+                        if (p > 0 && p == nn[p - 1]) { // repeat for secure
+                            continue;
+                        }
+                        float dist = oracle(cur_id, i);
+                        pool[p] = Neighbor(cur_id, dist, true);
+                    } else {
+                        auto& cur_id = random[p - K];
+                        float dist = oracle(cur_id, i);
+                        pool[p] = Neighbor(cur_id, dist, true);
+                    }
+                }
+                std::sort(pool.begin(), pool.begin() + nhood.L);
+                // std::cout << "pool 0" << pool[0].id << '\n';
+            }
+        }
+
+public:
         vector<Nhood> nhoods;
+        std::vector<std::vector<uint32_t>> id_graph;
 private:        
         IndexOracle const &oracle;
         IndexParams params;
@@ -1082,8 +1148,15 @@ public:
             if (verbosity > 0) cerr << "Generating control..." << endl;
             GenerateControl(oracle, params.controls, params.K, controls);
             if (verbosity > 0) cerr << "Initializing..." << endl;
+
             // initialize nhoods
-            init();
+            if (!params.in_graph_path.empty()) {
+                std::cout << "use faiss pre-graph" << '\n';
+                load_nn_graph(params.in_graph_path.c_str(), params.K);
+                prepare_nhoods();
+            } else {
+                init();
+            }
 
             // iterate until converge
             float total = N * float(N - 1) / 2;
@@ -1098,6 +1171,11 @@ public:
             for (unsigned it = 0; (params.iterations <= 0) || (it < params.iterations); ++it) {
                 ++info.iterations;
                 join();
+                // if (info.iterations == 1 && !params.in_graph_path.empty()) {
+                //     ;
+                // } else {
+                //     join();
+                // }
                 {
                     info.cost = n_comps / total;
                     accumulator_set<float, stats<tag::mean>> one_exact;

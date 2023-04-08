@@ -30,7 +30,7 @@ namespace po = boost::program_options;
 typedef KGRAPH_VALUE_TYPE value_type;
 
 int main (int argc, char *argv[]) {
-    omp_set_num_threads(32);
+    // omp_set_num_threads(32);
     auto start_time = std::chrono::high_resolution_clock::now();
     string data_path;
     string output_path;
@@ -72,7 +72,7 @@ int main (int argc, char *argv[]) {
     ("raw", "read raw binary file, need to specify D.")
     ("synthetic", po::value(&synthetic)->default_value(0), "generate synthetic data, for performance evaluation only, specify number of points")
     ("l2norm", "l2-normalize data, so as to mimic cosine similarity")
-    ("read_graph", po::value(&graph_path)->default_value(std::string("")), "read graph from file")
+    ("read_graph", po::value(&params.in_graph_path)->default_value(std::string("")), "read graph from file")
     ;
 
     po::options_description desc("Allowed options");

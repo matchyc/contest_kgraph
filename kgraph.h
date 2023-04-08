@@ -104,6 +104,7 @@ namespace kgraph {
             float recall;
             unsigned prune;
             int reverse;
+            std::string in_graph_path;
 
             /// Construct with default values.
             IndexParams (): iterations(default_iterations), L(default_L), K(default_K), S(default_S), R(default_R), controls(default_controls), seed(default_seed), delta(default_delta), recall(default_recall), prune(default_prune), reverse(default_reverse) {
@@ -160,6 +161,11 @@ namespace kgraph {
          * @param path Path to the index file.
          */
         virtual void load (char const *path) = 0;
+
+        // virtual void load_nn_graph(char const *path, uint32_t& K) = 0;
+
+        // virtual void prepare_nhoods() = 0;
+
         /// Save index to file.
         /**
          * @param path Path to the index file.

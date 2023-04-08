@@ -6,5 +6,5 @@ CXX_DEFINES =
 
 CXX_INCLUDES = -I/home/cm/projects/ann/sigmodcontest/baseline/kgraph
 
-CXX_FLAGS =  -g -Wall -march=native -Ofast -std=c++14 -fPIC -lmimalloc -mtune=native -ftree-vectorize -funroll-loops -ffast-math -fopenmp -O3 -DNDEBUG -std=gnu++14
+CXX_FLAGS =  -g -Wall -march=native -Ofast -std=c++14 -fPIC -lmimalloc -mtune=native -ftree-vectorize -funroll-loops -ffast-math -fopenmp -g -std=gnu++14
 
