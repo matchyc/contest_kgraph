@@ -195,7 +195,7 @@ namespace kgraph {
     //      addr[0] <- nn
     //      return 0
     template <typename NeighborT>
-    unsigned UpdateKnnListHelper (NeighborT *addr, unsigned K, NeighborT nn) {
+inline  unsigned UpdateKnnListHelper (NeighborT *addr, unsigned& K, NeighborT nn) {
         // optimize with memmove
         unsigned j;
         unsigned i = K;
@@ -223,7 +223,53 @@ namespace kgraph {
         addr[i] = nn;
         return i;
     }
+// inline  unsigned UpdateKnnListHelper (NeighborT *addr, unsigned& K, NeighborT nn) {
+//         // optimize with memmove, binary search
+//         unsigned i = 0, j = K;
+//         while (i < j) {
+//             unsigned m = (i + j) / 2;
+//             if (nn.dist > addr[m].dist) {
+//                 i = m + 1;
+//             } else if (nn.dist < addr[m].dist) {
+//                 j = m;
+//             } else { // handle equal distances
+//                 if (nn.id == addr[m].id) {
+//                     return K; // neighbor with same ID already exists
+//                 } else if (nn.id < addr[m].id) {
+//                     j = m;
+//                 } else {
+//                     i = m + 1;
+//                 }
+//             }
+//         }
 
+//         std::memmove(addr + i + 1, addr + i, (K - i) * sizeof(NeighborT));
+
+//         addr[i] = nn;
+//         return i;
+//     }
+    // inline unsigned UpdateKnnListHelper(NeighborT* addr, unsigned& K, const NeighborT& nn) {
+    //     // Find the correct position to insert the new neighbor
+    //     unsigned i = 0;
+    //     while (i < K && addr[i].dist <= nn.dist) {
+    //         if (addr[i].id == nn.id) {
+    //             return K; // neighbor with same ID already exists
+    //         }
+    //         ++i;
+    //     }
+
+    //     // Shift the existing neighbors one position to the right to make room for the new neighbor
+    //     std::copy_backward(addr + i, addr + K, addr + K + 1);
+
+    //     // Insert the new neighbor at the correct position
+    //     addr[i] = nn;
+
+    //     // Update the number of neighbors
+    //     ++K;
+
+    //     return i;
+    // }
+    
     static inline unsigned UpdateKnnList (Neighbor *addr, unsigned K, Neighbor nn) {
         return UpdateKnnListHelper<Neighbor>(addr, K, nn);
     }
@@ -906,14 +952,12 @@ private:
             }
         }
         void join () {
-            size_t cc = 0;
-#pragma omp parallel for default(shared) schedule(dynamic, 100) reduction(+:cc)
+#pragma omp parallel for schedule(dynamic, 1)
             for (unsigned n = 0; n < oracle.size(); ++n) {
                 size_t uu = 0;
                 nhoods[n].found = false;
                 nhoods[n].join([&](unsigned i, unsigned j) {
                         float dist = oracle(i, j);
-                        ++cc;
                         unsigned r;
                         r = nhoods[i].parallel_try_insert(j, dist);
                         if (r < params.K) ++uu;
@@ -922,7 +966,6 @@ private:
                 });
                 nhoods[n].found = uu > 0;
             }
-            n_comps += cc;
         }
 inline  void update (unsigned& inter_count) {
             unsigned N = oracle.size();
