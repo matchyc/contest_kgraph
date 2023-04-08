@@ -45,44 +45,44 @@ namespace kgraph {
     typedef std::lock_guard<Lock> LockGuard;
 
     // generate size distinct random numbers < N
-    template <typename RNG, unsigned BN = MAX_N>
-    static void GenRandom(RNG& rng, unsigned* addr, unsigned size, unsigned N) {
-        if (N == size) {
-            std::iota(addr, addr + size, 0);
-            return;
-        }
-        std::uniform_int_distribution<unsigned> dist(0, N - 1);
-        std::bitset<BN> bs;
-        unsigned count = 0;
-        while (count < size) {
-            unsigned val = dist(rng);
-            if (!bs[val]) {
-                bs.set(val);
-                addr[count++] = val;
-            }
-        }
-    }
-    // template <typename RNG>
-    // static void GenRandom (RNG &rng, unsigned *addr, unsigned size, unsigned N) {
+    // template <typename RNG, unsigned BN = MAX_N>
+    // static void GenRandom(RNG& rng, unsigned* addr, unsigned size, unsigned N) {
     //     if (N == size) {
     //         std::iota(addr, addr + size, 0);
     //         return;
     //     }
-    //     // std::uniform_int_distribution<unsigned> dist(0, N - 1);
-    //     for (unsigned i = 0; i < size; ++i) {
-    //         addr[i] = rng() % (N - size);
-    //     }
-    //     sort(addr, addr + size);
-    //     for (unsigned i = 1; i < size; ++i) {
-    //         if (addr[i] <= addr[i-1]) {
-    //             addr[i] = addr[i-1] + 1;
+    //     std::uniform_int_distribution<unsigned> dist(0, N - 1);
+    //     std::bitset<BN> bs;
+    //     unsigned count = 0;
+    //     while (count < size) {
+    //         unsigned val = dist(rng);
+    //         if (!bs[val]) {
+    //             bs.set(val);
+    //             addr[count++] = val;
     //         }
     //     }
-    //     unsigned off = rng() % N;
-    //     for (unsigned i = 0; i < size; ++i) {
-    //         addr[i] = (addr[i] + off) % N;
-    //     }
     // }
+    template <typename RNG>
+    static void GenRandom (RNG &rng, unsigned *addr, unsigned size, unsigned N) {
+        if (N == size) {
+            std::iota(addr, addr + size, 0);
+            return;
+        }
+        // std::uniform_int_distribution<unsigned> dist(0, N - 1);
+        for (unsigned i = 0; i < size; ++i) {
+            addr[i] = rng() % (N - size);
+        }
+        sort(addr, addr + size);
+        for (unsigned i = 1; i < size; ++i) {
+            if (addr[i] <= addr[i-1]) {
+                addr[i] = addr[i-1] + 1;
+            }
+        }
+        unsigned off = rng() % N;
+        for (unsigned i = 0; i < size; ++i) {
+            addr[i] = (addr[i] + off) % N;
+        }
+    }
 
     struct Neighbor {
         uint32_t id;
