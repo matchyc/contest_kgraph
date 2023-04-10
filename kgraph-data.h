@@ -13,7 +13,8 @@
 
 #ifdef __GNUC__
 #ifdef __AVX__
-#define KGRAPH_MATRIX_ALIGN 32
+#define KGRAPH_MATRIX_ALIGN 1
+// #define KGRAPH_MATRIX_ALIGN 32
 // #define KGRAPH_MATRIX_ALIGN 64
 #else
 #ifdef __SSE2__

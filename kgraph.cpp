@@ -32,6 +32,8 @@ static char const *kgraph_version = STRINGIFY(KGRAPH_VERSION) "-" STRINGIFY(KGRA
 #include <boost/accumulators/statistics/moment.hpp>
 #include "boost/smart_ptr/detail/spinlock.hpp"
 #include "kgraph.h"
+#define likely(x) __builtin_expect(!!(x), 1)
+#define unlikely(x) __builtin_expect(!!(x), 0)
 
 namespace kgraph {
 
@@ -86,7 +88,7 @@ namespace kgraph {
 
     struct Neighbor {
         uint32_t id;
-        float dist;
+        float dist; // dist to the current attached node
         bool flag;  // whether this entry is a newly found one
         Neighbor () {dist = 0; id = 0; flag = false;}
         Neighbor (unsigned i): id(i) {}
@@ -194,60 +196,54 @@ namespace kgraph {
     // Special case:  K == 0
     //      addr[0] <- nn
     //      return 0
+// template <typename NeighborT>
+// inline  unsigned UpdateKnnListHelper (NeighborT *addr, unsigned& K, NeighborT nn) {
+//         // optimize with memmove
+//         unsigned j;
+//         unsigned i = K;
+//         while (i > 0) {
+//             j = i - 1;
+//             if (addr[j].dist <= nn.dist) break;
+//             i = j;
+//         }
+//         // check for equal ID
+//         unsigned l = i;
+//         while (l > 0) {
+//             j = l - 1;
+//             if (addr[j].dist < nn.dist) break;
+//             if (addr[j].id == nn.id) return K + 1;
+//             l = j;
+//         }
+//         std::memmove(addr + i + 1, addr + i, (K - i) * sizeof(NeighborT));
+//         addr[i] = nn;
+//         return i;
+//     }
     template <typename NeighborT>
 inline  unsigned UpdateKnnListHelper (NeighborT *addr, unsigned& K, NeighborT nn) {
-        // optimize with memmove
-        unsigned j;
-        unsigned i = K;
-        while (i > 0) {
-            j = i - 1;
-            if (addr[j].dist <= nn.dist) break;
-            i = j;
+        // optimize with memmove, binary search
+        unsigned i = 0, j = K;
+        while (i < j) {
+            unsigned m = (i + j) / 2;
+            if (nn.dist > addr[m].dist) {
+                i = m + 1;
+            } else if (nn.dist < addr[m].dist) {
+                j = m;
+            } else { // handle equal distances
+                if (nn.id == addr[m].id) {
+                    return K; // neighbor with same ID already exists
+                } else if (nn.id < addr[m].id) {
+                    j = m;
+                } else {
+                    i = m + 1;
+                }
+            }
         }
-        // check for equal ID
-        unsigned l = i;
-        while (l > 0) {
-            j = l - 1;
-            if (addr[j].dist < nn.dist) break;
-            if (addr[j].id == nn.id) return K + 1;
-            l = j;
-        }
-        // i <= K-1
-        j = K;
-        // while (j > i) {
-        //     addr[j] = addr[j-1];
-        //     --j;
-        // }
-        std::memmove(addr + i + 1, addr + i, (j - i) * sizeof(NeighborT));
+
+        std::memmove(addr + i + 1, addr + i, (K - i) * sizeof(NeighborT));
 
         addr[i] = nn;
         return i;
     }
-// inline  unsigned UpdateKnnListHelper (NeighborT *addr, unsigned& K, NeighborT nn) {
-//         // optimize with memmove, binary search
-//         unsigned i = 0, j = K;
-//         while (i < j) {
-//             unsigned m = (i + j) / 2;
-//             if (nn.dist > addr[m].dist) {
-//                 i = m + 1;
-//             } else if (nn.dist < addr[m].dist) {
-//                 j = m;
-//             } else { // handle equal distances
-//                 if (nn.id == addr[m].id) {
-//                     return K; // neighbor with same ID already exists
-//                 } else if (nn.id < addr[m].id) {
-//                     j = m;
-//                 } else {
-//                     i = m + 1;
-//                 }
-//             }
-//         }
-
-//         std::memmove(addr + i + 1, addr + i, (K - i) * sizeof(NeighborT));
-
-//         addr[i] = nn;
-//         return i;
-//     }
     // inline unsigned UpdateKnnListHelper(NeighborT* addr, unsigned& K, const NeighborT& nn) {
     //     // Find the correct position to insert the new neighbor
     //     unsigned i = 0;
@@ -979,8 +975,7 @@ private:
 
         void init () {
             unsigned N = oracle.size();
-            unsigned seed = params.seed;
-            mt19937 rng(seed);
+            // unsigned seed = params.seed;
             for (auto &nhood: nhoods) {
                 nhood.nn_new.resize(params.S * 2);
                 nhood.pool.resize(params.L + 1);
@@ -990,20 +985,18 @@ private:
 #pragma omp parallel
             {
 #ifdef _OPENMP
-                // mt19937 rng(seed ^ omp_get_thread_num());
                 thread_local mt19937 rng(rd());
 #else
                 mt19937 rng(rd());
-                // mt19937 rng(seed);
 #endif
-                vector<unsigned> random(params.S + 1);
+                vector<unsigned> random(params.L + 1);
 #pragma omp for
                 for (unsigned n = 0; n < N; ++n) {
                     auto &nhood = nhoods[n];
                     Neighbors &pool = nhood.pool;
                     GenRandom(rng, &nhood.nn_new[0], nhood.nn_new.size(), N); // at the beginning all random
                     GenRandom(rng, &random[0], random.size(), N);
-                    nhood.L = params.S;
+                    nhood.L = params.L;
                     nhood.M = params.S;
                     unsigned i = 0;
                     for (unsigned l = 0; l < nhood.L; ++l) {
@@ -1048,20 +1041,29 @@ inline  void update (unsigned& inter_count) {
 #pragma omp parallel for
             for (unsigned n = 0; n < N; ++n) {
                 auto &nhood = nhoods[n];
-                if (nhood.found) {
-                    unsigned maxl = std::min(nhood.M + params.S, nhood.L);
+                if (likely(nhood.found)) {
                     unsigned c = 0;
                     unsigned l = 0;
-                    while ((l < maxl) && (c < params.S)) {
-                        if (nhood.pool[l].flag) ++c;
-                        ++l;
+                    unsigned maxl = 0; 
+                    maxl = std::min(nhood.M + params.S, nhood.L); 
+                    // while ((l < maxl) && (c < params.S)) {
+                    //     if (nhood.pool[l].flag) ++c;
+                    //     ++l;
+                    // }
+                    if (unlikely(nhood.pool.size() < params.S)) {
+                        maxl = std::min(nhood.M + params.S, nhood.L); 
+                        while ((l < maxl) && (c < params.S)) {
+                            if (nhood.pool[l].flag) ++c;
+                            ++l;
+                        }
+                    } else {
+                        l = nhood.pool.size();
                     }
                     nhood.M = l;
                 }
                 BOOST_VERIFY(nhood.M > 0);
-                nhood.radiusM = nhood.pool[nhood.M-1].dist;
-                // nhood.radiusM = nhood.pool[25].dist;
-                
+                nhood.radiusM = nhood.pool[nhood.M-1].dist; 
+                // last round the farthest new found node
             }
 #pragma omp parallel for
             for (unsigned n = 0; n < N; ++n) {
@@ -1075,8 +1077,7 @@ inline  void update (unsigned& inter_count) {
                         nn_new.push_back(nn.id);
                         if (nn.dist > nhood_o.radiusM) { // maybe detect valuable neighbor via radiusM
                             LockGuard guard(nhood_o.lock);
-                            // nhood_o.nn_new.push_back(n);
-                            nhood_o.rnn_new.push_back(n); // undirected, add both
+                            nhood_o.rnn_new.push_back(n); // reverse
                         }
                         nn.flag = false;
                     }
@@ -1084,7 +1085,6 @@ inline  void update (unsigned& inter_count) {
                         nn_old.push_back(nn.id);
                         if (nn.dist > nhood_o.radiusM) {
                             LockGuard guard(nhood_o.lock);
-                            // nhood_o.nn_old.push_back(n);
                             nhood_o.rnn_old.push_back(n);
                         }
                     }
@@ -1171,11 +1171,6 @@ public:
             for (unsigned it = 0; (params.iterations <= 0) || (it < params.iterations); ++it) {
                 ++info.iterations;
                 join();
-                // if (info.iterations == 1 && !params.in_graph_path.empty()) {
-                //     ;
-                // } else {
-                //     join();
-                // }
                 {
                     info.cost = n_comps / total;
                     accumulator_set<float, stats<tag::mean>> one_exact;
