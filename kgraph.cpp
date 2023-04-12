@@ -194,60 +194,61 @@ namespace kgraph {
     // Special case:  K == 0
     //      addr[0] <- nn
     //      return 0
-    template <typename NeighborT>
-inline  unsigned UpdateKnnListHelper (NeighborT *addr, unsigned& K, NeighborT nn) {
-        // optimize with memmove
-        unsigned j;
-        unsigned i = K;
-        while (i > 0) {
-            j = i - 1;
-            if (addr[j].dist <= nn.dist) break;
-            i = j;
-        }
-        // check for equal ID
-        unsigned l = i;
-        while (l > 0) {
-            j = l - 1;
-            if (addr[j].dist < nn.dist) break;
-            if (addr[j].id == nn.id) return K + 1;
-            l = j;
-        }
-        // i <= K-1
-        j = K;
-        // while (j > i) {
-        //     addr[j] = addr[j-1];
-        //     --j;
-        // }
-        std::memmove(addr + i + 1, addr + i, (j - i) * sizeof(NeighborT));
-
-        addr[i] = nn;
-        return i;
-    }
+//     template <typename NeighborT>
 // inline  unsigned UpdateKnnListHelper (NeighborT *addr, unsigned& K, NeighborT nn) {
-//         // optimize with memmove, binary search
-//         unsigned i = 0, j = K;
-//         while (i < j) {
-//             unsigned m = (i + j) / 2;
-//             if (nn.dist > addr[m].dist) {
-//                 i = m + 1;
-//             } else if (nn.dist < addr[m].dist) {
-//                 j = m;
-//             } else { // handle equal distances
-//                 if (nn.id == addr[m].id) {
-//                     return K; // neighbor with same ID already exists
-//                 } else if (nn.id < addr[m].id) {
-//                     j = m;
-//                 } else {
-//                     i = m + 1;
-//                 }
-//             }
+//         // optimize with memmove
+//         unsigned j;
+//         unsigned i = K;
+//         while (i > 0) {
+//             j = i - 1;
+//             if (addr[j].dist <= nn.dist) break;
+//             i = j;
 //         }
-
-//         std::memmove(addr + i + 1, addr + i, (K - i) * sizeof(NeighborT));
+//         // check for equal ID
+//         unsigned l = i;
+//         while (l > 0) {
+//             j = l - 1;
+//             if (addr[j].dist < nn.dist) break;
+//             if (addr[j].id == nn.id) return K + 1;
+//             l = j;
+//         }
+//         // i <= K-1
+//         j = K;
+//         // while (j > i) {
+//         //     addr[j] = addr[j-1];
+//         //     --j;
+//         // }
+//         std::memmove(addr + i + 1, addr + i, (j - i) * sizeof(NeighborT));
 
 //         addr[i] = nn;
 //         return i;
 //     }
+    template <typename NeighborT>
+inline  unsigned UpdateKnnListHelper (NeighborT *addr, unsigned& K, NeighborT nn) {
+        // optimize with memmove, binary search
+        unsigned i = 0, j = K;
+        while (i < j) {
+            unsigned m = (i + j) / 2;
+            if (nn.dist > addr[m].dist) {
+                i = m + 1;
+            } else if (nn.dist < addr[m].dist) {
+                j = m;
+            } else { // handle equal distances
+                if (nn.id == addr[m].id) {
+                    return K; // neighbor with same ID already exists
+                } else if (nn.id < addr[m].id) {
+                    j = m;
+                } else {
+                    i = m + 1;
+                }
+            }
+        }
+
+        std::memmove(addr + i + 1, addr + i, (K - i) * sizeof(NeighborT));
+
+        addr[i] = nn;
+        return i;
+    }
     // inline unsigned UpdateKnnListHelper(NeighborT* addr, unsigned& K, const NeighborT& nn) {
     //     // Find the correct position to insert the new neighbor
     //     unsigned i = 0;
@@ -293,10 +294,22 @@ inline  unsigned UpdateKnnListHelper (NeighborT *addr, unsigned& K, NeighborT nn
         vector<unsigned> nn_new;
         vector<unsigned> rnn_old;
         vector<unsigned> rnn_new;
-
+        
+        void clear_all() {
+            nn_old.clear();
+            nn_new.clear();
+            rnn_old.clear();
+            rnn_new.clear();
+        }
         // only non-readonly method which is supposed to be called in parallel
         unsigned parallel_try_insert (unsigned id, float dist) {
-            if (dist > radius) return pool.size();
+            if (dist > radius) {
+                // if (dist < radius * 1.05) {
+                //     pool[pool.size() - 1] = Neighbor(id, dist, true);
+                //     radius = dist;
+                // }
+                return pool.size();
+            }
             LockGuard guard(lock);
             unsigned l = UpdateKnnList(&pool[0], L, Neighbor(id, dist, true));
             if (l <= L) { // inserted
@@ -311,19 +324,31 @@ inline  unsigned UpdateKnnListHelper (NeighborT *addr, unsigned& K, NeighborT nn
         }
 
         // join should not be conflict with insert
-        template <typename C>
+    //     template <typename C>
+    // inline void join (C callback) const {
+    //         for (unsigned const i: nn_new) {
+    //             for (unsigned const j: nn_new) {
+    //                 if (i < j) {
+    //                     callback(i, j);
+    //                 }
+    //             }
+    //             for (unsigned j: nn_old) {
+    //                 callback(i, j);
+    //             }
+    //         }
+    //     }
+    template <typename C>
     inline void join (C callback) const {
-            for (unsigned const i: nn_new) {
-                for (unsigned const j: nn_new) {
-                    if (i < j) {
-                        callback(i, j);
-                    }
-                }
-                for (unsigned j: nn_old) {
-                    callback(i, j);
-                }
+        for (unsigned i = 0; i < nn_new.size(); ++i) {
+            for (unsigned j = i + 1; j < nn_new.size(); ++j) {
+                callback(nn_new[i], nn_new[j]);
+            }
+            for (unsigned j = 0; j < nn_old.size(); ++j) {
+                callback(nn_new[i], nn_old[j]);
             }
         }
+    }
+
     };
 
 inline  void LinearSearch (IndexOracle const &oracle, unsigned i, unsigned K, vector<Neighbor> *pnns) {
@@ -502,14 +527,15 @@ inline  void LinearSearch (IndexOracle const &oracle, unsigned i, unsigned K, ve
             // const unsigned graphSize = graph.size();
             const unsigned K = 100;
             std::vector<uint32_t> buffer(K);
+            const int bufferSize = K * sizeof(uint32_t);
             for (unsigned i = 0; i < graphSize; ++i) {
                 auto& knn = nhoods[i].pool;
                 // auto& knn = graph[i];
-                const int bufferSize = K * sizeof(uint32_t);
                 std::transform(knn.begin(), knn.end(), buffer.begin(),
                     [](auto const& x) { return x.id; });
                 os.write(reinterpret_cast<char const *>(buffer.data()), bufferSize);
             }
+            os.close();
             // std::cout << "write count: " << write_count << std::endl;
             // os.seekp(0, std::ios::end);
             // std::cout << "file size: " << os.tellp() << std::endl;
@@ -941,28 +967,36 @@ public:
                 std::vector<uint32_t> &nn = id_graph[i];
                 auto& nhood = nhoods[i];
                 auto& pool = nhood.pool;
-                nhood.L = params.S;
+                nhood.L = params.L;
                 nhood.M = params.S;
-                std::vector<uint32_t> random(pool.size() - K);
-                GenRandom(rng, &nhood.nn_new[0], nhood.nn_new.size(), N);
+                // std::vector<uint32_t> random(pool.size() - K);
+                std::vector<uint32_t> random(pool.size());
+                // GenRandom(rng, &nhood.nn_new[0], nhood.nn_new.size(), N);
                 GenRandom(rng, &random[0], random.size(), N);
+                std::copy(nn.begin(), nn.begin() + K, nhood.nn_new.begin());
+                // for (uint32_t p = 0; p < nhood.L; ++p) {
+                //     if (p < K) {
+                //         auto& cur_id = nn[p];
+                //         if (cur_id == i) { //self
+                //             continue;
+                //         }
+                //         if (p > 0 && p == nn[p - 1]) { // repeat for secure
+                //             continue;
+                //         }
+                //         float dist = oracle(cur_id, i);
+                //         pool[p] = Neighbor(cur_id, dist, true);
+                //     } else {
+                //         auto& cur_id = random[p - K];
+                //         float dist = oracle(cur_id, i);
+                //         pool[p] = Neighbor(cur_id, dist, true);
+                //     }
+                // }
                 for (uint32_t p = 0; p < nhood.L; ++p) {
-                    if (p < K) {
-                        auto& cur_id = nn[p];
-                        if (cur_id == i) { //self
-                            continue;
-                        }
-                        if (p > 0 && p == nn[p - 1]) { // repeat for secure
-                            continue;
-                        }
-                        float dist = oracle(cur_id, i);
-                        pool[p] = Neighbor(cur_id, dist, true);
-                    } else {
-                        auto& cur_id = random[p - K];
-                        float dist = oracle(cur_id, i);
-                        pool[p] = Neighbor(cur_id, dist, true);
-                    }
+                    auto& cur_id = random[p];
+                    float dist = oracle(cur_id, i);
+                    pool[p] = Neighbor(cur_id, dist, true);
                 }
+                GenRandom(rng, &nhood.nn_new[K], nhood.nn_new.size() - K, N);
                 std::sort(pool.begin(), pool.begin() + nhood.L);
                 // std::cout << "pool 0" << pool[0].id << '\n';
             }
@@ -996,14 +1030,14 @@ private:
                 mt19937 rng(rd());
                 // mt19937 rng(seed);
 #endif
-                vector<unsigned> random(params.S + 1);
+                vector<unsigned> random(params.L + 1);
 #pragma omp for
                 for (unsigned n = 0; n < N; ++n) {
                     auto &nhood = nhoods[n];
                     Neighbors &pool = nhood.pool;
                     GenRandom(rng, &nhood.nn_new[0], nhood.nn_new.size(), N); // at the beginning all random
                     GenRandom(rng, &random[0], random.size(), N);
-                    nhood.L = params.S;
+                    nhood.L = params.L;
                     nhood.M = params.S;
                     unsigned i = 0;
                     for (unsigned l = 0; l < nhood.L; ++l) {
@@ -1036,34 +1070,38 @@ private:
 inline  void update (unsigned& inter_count) {
             unsigned N = oracle.size();
 
-#pragma omp parallel for
-            for (auto &nhood: nhoods) {
-                nhood.nn_new.clear();
-                nhood.nn_old.clear();
-                nhood.rnn_new.clear();
-                nhood.rnn_old.clear();
-                nhood.radius = nhood.pool.back().dist;
-            }
+// #pragma omp parallel for
+//             for (auto &nhood: nhoods) {
+//                 nhood.nn_new.clear();
+//                 nhood.nn_old.clear();
+//                 nhood.rnn_new.clear();
+//                 nhood.rnn_old.clear();
+//                 nhood.radius = nhood.pool.back().dist;
+//             }
             //!!! compute radius2
 #pragma omp parallel for
             for (unsigned n = 0; n < N; ++n) {
                 auto &nhood = nhoods[n];
+                nhood.clear_all();
                 if (nhood.found) {
-                    unsigned maxl = std::min(nhood.M + params.S, nhood.L);
-                    unsigned c = 0;
-                    unsigned l = 0;
-                    while ((l < maxl) && (c < params.S)) {
-                        if (nhood.pool[l].flag) ++c;
-                        ++l;
-                    }
-                    nhood.M = l;
+                    // if (inter_count <= 1) {
+                    //     unsigned maxl = std::min(nhood.M + params.S, nhood.L);
+                    //     unsigned c = 0;
+                    //     unsigned l = 0;
+                    //     while ((l < maxl) && (c < params.S)) {
+                    //         if (nhood.pool[l].flag) ++c;
+                    //         ++l;
+                    //     }
+                    //     nhood.M = l;
+                    // } else {
+                        nhood.M = nhood.pool.size();
+                    // }
                 }
                 BOOST_VERIFY(nhood.M > 0);
                 nhood.radiusM = nhood.pool[nhood.M-1].dist;
                 // nhood.radiusM = nhood.pool[25].dist;
-                
             }
-#pragma omp parallel for
+#pragma omp parallel for schedule(dynamic, 100)
             for (unsigned n = 0; n < N; ++n) {
                 auto &nhood = nhoods[n];
                 auto &nn_new = nhood.nn_new;
@@ -1073,7 +1111,7 @@ inline  void update (unsigned& inter_count) {
                     auto &nhood_o = nhoods[nn.id];  // nhood on the other side of the edge
                     if (nn.flag) {
                         nn_new.push_back(nn.id);
-                        if (nn.dist > nhood_o.radiusM) { // maybe detect valuable neighbor via radiusM
+                        if (nhood_o.rnn_new.size() < params.R && nn.dist > nhood_o.radiusM) { // maybe detect valuable neighbor via radiusM
                             LockGuard guard(nhood_o.lock);
                             // nhood_o.nn_new.push_back(n);
                             nhood_o.rnn_new.push_back(n); // undirected, add both
@@ -1082,7 +1120,7 @@ inline  void update (unsigned& inter_count) {
                     }
                     else {
                         nn_old.push_back(nn.id);
-                        if (nn.dist > nhood_o.radiusM) {
+                        if (nhood_o.rnn_old.size() < params.R && nn.dist > nhood_o.radiusM) {
                             LockGuard guard(nhood_o.lock);
                             // nhood_o.nn_old.push_back(n);
                             nhood_o.rnn_old.push_back(n);
@@ -1090,10 +1128,10 @@ inline  void update (unsigned& inter_count) {
                     }
                 }
             }
-            std::random_device rd;
-#pragma omp parallel for
+            // std::random_device rd;
+// #pragma omp parallel for
             for (unsigned i = 0; i < N; ++i) {
-                thread_local std::default_random_engine rng(rd());
+                // thread_local std::default_random_engine rng(rd());
                 auto &nn_new = nhoods[i].nn_new;
                 auto &nn_old = nhoods[i].nn_old;
                 auto &rnn_new = nhoods[i].rnn_new;
@@ -1102,15 +1140,15 @@ inline  void update (unsigned& inter_count) {
                 // nn_new.reserve(nn_new.size() + params.R);
                 // nn_old.reserve(nn_old.size() + params.R);
 
-                if ((rnn_new.size() > params.R)) {
-                    std::shuffle(rnn_new.begin(), rnn_new.end(), rng);
-                    rnn_new.resize(params.R);
-                }
+                // if ((rnn_new.size() > params.R)) {
+                //     std::shuffle(rnn_new.begin(), rnn_new.end(), rng);
+                //     rnn_new.resize(params.R);
+                // }
 
-                if ((rnn_old.size() > params.R)) {
-                    std::shuffle(rnn_old.begin(), rnn_old.end(), rng);
-                    rnn_old.resize(params.R);
-                }
+                // if ((rnn_old.size() > params.R)) {
+                //     std::shuffle(rnn_old.begin(), rnn_old.end(), rng);
+                //     rnn_old.resize(params.R);
+                // }
 
                 nn_new.insert(nn_new.end(), std::make_move_iterator(rnn_new.begin()), std::make_move_iterator(rnn_new.end()));
                 nn_old.insert(nn_old.end(), std::make_move_iterator(rnn_old.begin()), std::make_move_iterator(rnn_old.end()));

@@ -30,7 +30,7 @@ namespace po = boost::program_options;
 typedef KGRAPH_VALUE_TYPE value_type;
 
 int main (int argc, char *argv[]) {
-    // omp_set_num_threads(32);
+    omp_set_num_threads(32);
     auto start_time = std::chrono::high_resolution_clock::now();
     string data_path;
     string output_path;

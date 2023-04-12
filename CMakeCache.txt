@@ -36,7 +36,7 @@ CMAKE_AR:FILEPATH=/usr/bin/ar
 
 //Choose the type of build, options are: None Debug Release RelWithDebInfo
 // MinSizeRel ...
-CMAKE_BUILD_TYPE:STRING=Debug
+CMAKE_BUILD_TYPE:STRING=Release
 
 //Enable/Disable color output during build.
 CMAKE_COLOR_MAKEFILE:BOOL=ON
@@ -267,9 +267,6 @@ boost_system_DIR:PATH=/home/cm/miniconda3/envs/py38/lib/cmake/boost_system-1.78.
 
 //The directory containing a CMake configuration file for boost_timer.
 boost_timer_DIR:PATH=/home/cm/miniconda3/envs/py38/lib/cmake/boost_timer-1.78.0
-
-//Dependencies for the target
-kgraph_LIB_DEPENDS:STATIC=general;mimalloc;general;mimalloc;
 
 //The directory containing a CMake configuration file for mimalloc.
 mimalloc_DIR:PATH=/usr/local/lib/cmake/mimalloc-2.1

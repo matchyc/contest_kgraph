@@ -1396,6 +1396,11 @@ CMakeFiles/kgraph.dir/metric.cpp.o: metric.cpp \
   /usr/include/c++/11/bits/atomic_lockfree_defines.h \
   /usr/include/c++/11/backward/auto_ptr.h \
   /usr/include/c++/11/iostream \
+  /usr/lib/gcc/x86_64-linux-gnu/11/include/xmmintrin.h \
+  /usr/lib/gcc/x86_64-linux-gnu/11/include/mmintrin.h \
+  /usr/lib/gcc/x86_64-linux-gnu/11/include/mm_malloc.h \
+  /usr/include/c++/11/stdlib.h \
+  /usr/lib/gcc/x86_64-linux-gnu/11/include/emmintrin.h \
   /usr/lib/gcc/x86_64-linux-gnu/11/include/immintrin.h \
   /usr/lib/gcc/x86_64-linux-gnu/11/include/x86gprintrin.h \
   /usr/lib/gcc/x86_64-linux-gnu/11/include/ia32intrin.h \
@@ -1432,11 +1437,6 @@ CMakeFiles/kgraph.dir/metric.cpp.o: metric.cpp \
   /usr/lib/gcc/x86_64-linux-gnu/11/include/xsavesintrin.h \
   /usr/lib/gcc/x86_64-linux-gnu/11/include/xtestintrin.h \
   /usr/lib/gcc/x86_64-linux-gnu/11/include/hresetintrin.h \
-  /usr/lib/gcc/x86_64-linux-gnu/11/include/mmintrin.h \
-  /usr/lib/gcc/x86_64-linux-gnu/11/include/xmmintrin.h \
-  /usr/lib/gcc/x86_64-linux-gnu/11/include/mm_malloc.h \
-  /usr/include/c++/11/stdlib.h \
-  /usr/lib/gcc/x86_64-linux-gnu/11/include/emmintrin.h \
   /usr/lib/gcc/x86_64-linux-gnu/11/include/pmmintrin.h \
   /usr/lib/gcc/x86_64-linux-gnu/11/include/tmmintrin.h \
   /usr/lib/gcc/x86_64-linux-gnu/11/include/smmintrin.h \

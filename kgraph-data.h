@@ -10,10 +10,13 @@
 #include <boost/assert.hpp>
 #include <mimalloc-2.1/mimalloc.h>
 #include <iostream>
+#include <xmmintrin.h>
+#include <immintrin.h>
 
 #ifdef __GNUC__
 #ifdef __AVX__
-#define KGRAPH_MATRIX_ALIGN 32
+#define KGRAPH_MATRIX_ALIGN 1
+// #define KGRAPH_MATRIX_ALIGN 32
 // #define KGRAPH_MATRIX_ALIGN 64
 #else
 #ifdef __SSE2__
@@ -25,6 +28,19 @@
 #endif
 
 namespace kgraph {
+                            // NOTE :: good efficiency when total_vec_size is integral multiple of 64
+    inline void prefetch_vector(const char* vec, size_t vecsize) {
+        size_t max_prefetch_size = (vecsize / 52) * 52;
+        for (size_t d = 0; d < max_prefetch_size; d += 52)
+        _mm_prefetch((const char*) vec + d, _MM_HINT_T0);
+    }
+
+    // NOTE :: good efficiency when total_vec_size is integral multiple of 64
+    inline void prefetch_vector_l2(const char* vec, size_t vecsize) {
+        size_t max_prefetch_size = (vecsize / 52) * 52;
+        for (size_t d = 0; d < max_prefetch_size; d += 52)
+        _mm_prefetch((const char*) vec + d, _MM_HINT_T1);
+    }
 
     /// L2 square distance with AVX instructions.
     /** AVX instructions have strong alignment requirement for t1 and t2.
@@ -111,7 +127,11 @@ namespace kgraph {
             */
             if (data) free(data);
             // data = (char *)memalign(A, row * stride); // SSE instruction needs data to be aligned
-            data = (char *)mi_aligned_alloc(A, row * stride); // SSE instruction needs data to be aligned
+            if (A != 1) {
+                data = (char *)mi_aligned_alloc(A, row * stride); // SSE instruction needs data to be aligned
+            } else {
+                data = (char *)mi_malloc(row * stride);
+            }
             if (!data) throw runtime_error("memalign");
             std::cout << "Read data: num_pts = " << row << " aligned_space = " << stride << "\n";
         }
@@ -270,6 +290,7 @@ namespace kgraph {
             MatrixProxy<DATA_TYPE> proxy;
             DATA_TYPE const *query;
         public:
+
             SearchOracle (MatrixProxy<DATA_TYPE> const &p, DATA_TYPE const *q): proxy(p), query(q) {
             }
             virtual unsigned size () const {
@@ -286,12 +307,15 @@ namespace kgraph {
             return proxy.size();
         }
         virtual float operator () (unsigned i, unsigned j) const {
+            // prefetch_vector((const char *) proxy[i], sizeof(DATA_TYPE) * proxy.dim());
+            // prefetch_vector((const char *) proxy[j], sizeof(DATA_TYPE) * proxy.dim());
             return DIST_TYPE::apply(proxy[i], proxy[j], proxy.dim());
         }
         SearchOracle query (DATA_TYPE const *query) const {
             return SearchOracle(proxy, query);
         }
     };
+
 
     inline float AverageRecall (Matrix<float> const &gs, Matrix<float> const &result, unsigned K = 0) {
         if (K == 0) {
@@ -337,8 +361,8 @@ namespace kgraph { namespace metric {
         template <>
         inline float l2sqr::apply<float> (float const *t1, float const *t2, unsigned dim) {
             // std::cout << "use avx distance" << std::endl;
-            return avx2_l2_distance(t1, t2, dim);
-            // return float_l2sqr_avx(t1, t2, dim);
+            // return avx2_l2_distance(t1, t2, dim);
+            return float_l2sqr_avx(t1, t2, dim);
             // return float_l2sqr_avx_opt(t1, t2, dim);
             // return avx512_l2_distance(t1, t2, dim);
         }
@@ -349,6 +373,7 @@ namespace kgraph { namespace metric {
 namespace kgraph { namespace metric {
         template <>
         inline float l2sqr::apply<float> (float const *t1, float const *t2, unsigned dim) {
+            std::cout << "use sse2" << '\n';
             // return float_dot_sse2(t1, t2, dim);
             return float_l2sqr_sse2(t1, t2, dim);
         }

@@ -1,4 +1,5 @@
 output.bin
+output_graph.pkl
 # Compiled object files
 *.o
 *.obj

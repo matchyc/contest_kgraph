@@ -34,11 +34,12 @@ float float_dot (float const *t1, float const *t2, unsigned dim) {
 // #if 1
 #include <immintrin.h>
 #define AVX_L2SQR(addr1, addr2, dest, tmp1, tmp2) \
-    tmp1 = _mm256_loadu_ps(addr1);\
-    tmp2 = _mm256_loadu_ps(addr2);\
+    tmp1 = _mm256_load_ps(addr1);\
+    tmp2 = _mm256_load_ps(addr2);\
     tmp1 = _mm256_sub_ps(tmp1, tmp2); \
-    tmp1 = _mm256_mul_ps(tmp1, tmp1); \
-    dest = _mm256_add_ps(dest, tmp1); 
+    dest = _mm256_fmadd_ps(tmp1, tmp1, dest)
+    // tmp1 = _mm256_mul_ps(tmp1, tmp1); 
+    // dest = _mm256_add_ps(dest, tmp1); 
 namespace kgraph {
 //     float float_l2sqr_avx (float const *t1, float const *t2, unsigned dim) {
 //     __m256 sum0, sum1, sum2, sum3;
@@ -127,7 +128,7 @@ namespace kgraph {
             AVX_L2SQR(l + 16, r + 16, sum, l2, r2);
             AVX_L2SQR(l + 24, r + 24, sum, l3, r3);
         }
-        _mm256_storeu_ps(unpack, sum);
+        _mm256_store_ps(unpack, sum);
         ret = unpack[0] + unpack[1] + unpack[2] + unpack[3]
             + unpack[4] + unpack[5] + unpack[6] + unpack[7];
         return ret;//sqrt(ret);
@@ -264,6 +265,7 @@ float avx512_l2_distance(float const * a, float const * b, unsigned n) {
     float avx2_l2_distance(const float* a, const float* b, unsigned dim) {
         __m256 sum = _mm256_setzero_ps(); // Initialize sum to 0
         unsigned i;
+        dim = 104;
         for (i = 0; i < dim - 7; i += 8) { // Process 8 floats at a time
             __m256 a_vec = _mm256_load_ps(&a[i]); // Load 8 floats from a
             __m256 b_vec = _mm256_load_ps(&b[i]); // Load 8 floats from b
