@@ -228,7 +228,6 @@ namespace kgraph {
         const int kFloatsPerVec = 16;
         __m512 sum1 = _mm512_setzero_ps();
         __m512 sum2 = _mm512_setzero_ps();
-        // n = 448;
         // Process 32 floats at once
         for (int i = 0; i + 2*kFloatsPerVec <= n; i += 2*kFloatsPerVec) {
             // Load two sets of 32 floats from a and b with aligned memory access
@@ -238,12 +237,16 @@ namespace kgraph {
             __m512 b_vec2 = _mm512_load_ps(&b[i + kFloatsPerVec]);
 
             // Calculate difference and square the result using fused multiply-add
+            // __m512 diff1 = _mm512_sub_ps(a_vec1, b_vec1);
+            // __m512 squared1 = _mm512_fmadd_ps(diff1, diff1, sum1);
+            // sum1 = squared1;
+            // __m512 diff2 = _mm512_sub_ps(a_vec2, b_vec2);
+            // __m512 squared2 = _mm512_fmadd_ps(diff2, diff2, sum2);
+            // sum2 = squared2;
             __m512 diff1 = _mm512_sub_ps(a_vec1, b_vec1);
-            __m512 squared1 = _mm512_fmadd_ps(diff1, diff1, sum1);
-            sum1 = squared1;
+            sum1 = _mm512_fmadd_ps(diff1, diff1, sum1);
             __m512 diff2 = _mm512_sub_ps(a_vec2, b_vec2);
-            __m512 squared2 = _mm512_fmadd_ps(diff2, diff2, sum2);
-            sum2 = squared2;
+            sum2 = _mm512_fmadd_ps(diff2, diff2, sum2);
         }
 
         // Combine the two sum vectors to a single sum vector
@@ -264,32 +267,26 @@ namespace kgraph {
 
     // don't use, not good enough
     float avx512_l2_distance_opt(float const * a, float const * b, unsigned n) {
-        const int kFloatsPerVec = 8;
-            __m512 sum1 = _mm512_setzero_ps();
-            
-            // Process 8 floats at once
-            for (int i = 0; i + kFloatsPerVec <= 112; i += kFloatsPerVec) {
-                // Load two sets of 8 floats from a and b with aligned memory access
-                __m512 a_vec = _mm512_loadu_ps(&a[i]);
-                __m512 b_vec = _mm512_loadu_ps(&b[i]);
+        const int kFloatsPerVec = 16;
+        __m512 sum1 = _mm512_setzero_ps();
+        n = 112;
+        for (int i = 0; i + kFloatsPerVec <= n; i += kFloatsPerVec) {
+            // Load two sets of 32 floats from a and b with aligned memory access
+            __m512 a_vec1 = _mm512_load_ps(&a[i]);
+            __m512 b_vec1 = _mm512_load_ps(&b[i]);
+            __m512 diff1 = _mm512_sub_ps(a_vec1, b_vec1);
+            sum1 = _mm512_fmadd_ps(diff1, diff1, sum1);
+        }
 
-                // Calculate difference and square the result using fused multiply-add
-                __m512 diff = _mm512_sub_ps(a_vec, b_vec);
-                __m512 squared = _mm512_fmadd_ps(diff, diff, sum1);
-                sum1 = squared;
-            }
+        // Combine the two sum vectors to a single sum vector
 
-            float result = 0;
-            // Sum the remaining floats in the sum vector using non-vectorized operations
-            for (int j = 0; j < kFloatsPerVec; j++) {
-                result += ((float*)&sum1)[j];
-            }
-            // Process the remaining elements with non-vectorized operations
-            for (int i = 112 - (112 % kFloatsPerVec); i < 112; i++) {
-                float diff = a[i] - b[i];
-                result += diff * diff;
-            }
-            return result;
+        float result = 0;
+        // Sum the remaining floats in the sum vector using non-vectorized operations
+        for (int j = 0; j < kFloatsPerVec; j++) {
+            // result += ((float*)&sum12)[j];
+            result += ((float*)&sum1)[j];
+        }
+        return result;
     }
 
     float avx2_l2_distance(const float* a, const float* b, unsigned dim) {

@@ -16,8 +16,8 @@
 #ifdef __GNUC__
 #ifdef __AVX__
 // #define KGRAPH_MATRIX_ALIGN 1
-#define KGRAPH_MATRIX_ALIGN 32
-// #define KGRAPH_MATRIX_ALIGN 64
+// #define KGRAPH_MATRIX_ALIGN 32
+#define KGRAPH_MATRIX_ALIGN 64
 #else
 #ifdef __SSE2__
 #define KGRAPH_MATRIX_ALIGN 16
@@ -30,15 +30,21 @@
 namespace kgraph {
     // NOTE :: good efficiency when total_vec_size is integral multiple of 64
     inline void prefetch_vector(const char* vec, size_t vecsize) {
-        size_t max_prefetch_size = (vecsize / 32) * 32;
-        for (size_t d = 0; d < max_prefetch_size; d += 32)
+        // size_t max_prefetch_size = (vecsize / 32) * 32;
+        // for (size_t d = 0; d < max_prefetch_size; d += 32)
+        // _mm_prefetch((const char*) vec + d, _MM_HINT_T0);
+        size_t max_prefetch_size = (vecsize / 64) * 64;
+        for (size_t d = 0; d < max_prefetch_size; d += 64)
         _mm_prefetch((const char*) vec + d, _MM_HINT_T0);
     }
 
     // NOTE :: good efficiency when total_vec_size is integral multiple of 64
     inline void prefetch_vector_l2(const char* vec, size_t vecsize) {
-        size_t max_prefetch_size = (vecsize / 32) * 32;
-        for (size_t d = 0; d < max_prefetch_size; d += 32)
+        // size_t max_prefetch_size = (vecsize / 32) * 32;
+        // for (size_t d = 0; d < max_prefetch_size; d += 32)
+        // _mm_prefetch((const char*) vec + d, _MM_HINT_T1);
+        size_t max_prefetch_size = (vecsize / 64) * 64;
+        for (size_t d = 0; d < max_prefetch_size; d += 64)
         _mm_prefetch((const char*) vec + d, _MM_HINT_T1);
     }
 
@@ -365,11 +371,11 @@ namespace kgraph { namespace metric {
         template <>
         inline float l2sqr::apply<float> (float const *t1, float const *t2, unsigned dim) {
             // std::cout << "use avx distance" << std::endl;
-            return avx2_l2_distance(t1, t2, dim);
+            // return avx2_l2_distance(t1, t2, dim);
             // return float_l2sqr_avx(t1, t2, dim);f
             // return float_l2sqr_avx_opt(t1, t2, dim);
             // return avx512_l2_distance(t1, t2, dim);
-            // return avx512_l2_distance_opt(t1, t2, dim);
+            return avx512_l2_distance_opt(t1, t2, dim);
         }
 }}
 #endif

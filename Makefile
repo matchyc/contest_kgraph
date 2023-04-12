@@ -162,19 +162,6 @@ depend:
 .PHONY : depend
 
 #=============================================================================
-# Target rules for targets named kgraph
-
-# Build rule for target.
-kgraph: cmake_check_build_system
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 kgraph
-.PHONY : kgraph
-
-# fast build rule for target.
-kgraph/fast:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/kgraph.dir/build.make CMakeFiles/kgraph.dir/build
-.PHONY : kgraph/fast
-
-#=============================================================================
 # Target rules for targets named kgrapha
 
 # Build rule for target.
@@ -229,7 +216,6 @@ kgraph.o: kgraph.cpp.o
 
 # target to build an object file
 kgraph.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/kgraph.dir/build.make CMakeFiles/kgraph.dir/kgraph.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/kgrapha.dir/build.make CMakeFiles/kgrapha.dir/kgraph.cpp.o
 .PHONY : kgraph.cpp.o
 
@@ -238,7 +224,6 @@ kgraph.i: kgraph.cpp.i
 
 # target to preprocess a source file
 kgraph.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/kgraph.dir/build.make CMakeFiles/kgraph.dir/kgraph.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/kgrapha.dir/build.make CMakeFiles/kgrapha.dir/kgraph.cpp.i
 .PHONY : kgraph.cpp.i
 
@@ -247,7 +232,6 @@ kgraph.s: kgraph.cpp.s
 
 # target to generate assembly for a file
 kgraph.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/kgraph.dir/build.make CMakeFiles/kgraph.dir/kgraph.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/kgrapha.dir/build.make CMakeFiles/kgrapha.dir/kgraph.cpp.s
 .PHONY : kgraph.cpp.s
 
@@ -256,7 +240,6 @@ metric.o: metric.cpp.o
 
 # target to build an object file
 metric.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/kgraph.dir/build.make CMakeFiles/kgraph.dir/metric.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/kgrapha.dir/build.make CMakeFiles/kgrapha.dir/metric.cpp.o
 .PHONY : metric.cpp.o
 
@@ -265,7 +248,6 @@ metric.i: metric.cpp.i
 
 # target to preprocess a source file
 metric.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/kgraph.dir/build.make CMakeFiles/kgraph.dir/metric.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/kgrapha.dir/build.make CMakeFiles/kgrapha.dir/metric.cpp.i
 .PHONY : metric.cpp.i
 
@@ -274,7 +256,6 @@ metric.s: metric.cpp.s
 
 # target to generate assembly for a file
 metric.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/kgraph.dir/build.make CMakeFiles/kgraph.dir/metric.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/kgrapha.dir/build.make CMakeFiles/kgrapha.dir/metric.cpp.s
 .PHONY : metric.cpp.s
 
@@ -291,7 +272,6 @@ help:
 	@echo "... list_install_components"
 	@echo "... rebuild_cache"
 	@echo "... index"
-	@echo "... kgraph"
 	@echo "... kgrapha"
 	@echo "... index.o"
 	@echo "... index.i"

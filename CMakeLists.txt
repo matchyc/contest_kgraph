@@ -5,8 +5,8 @@ project (KGRAPH)
 
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -Ofast -std=c++14 -fPIC -lmimalloc -mtune=native -ftree-vectorize -funroll-loops -ffast-math -mavx -mavx512f -mavx512vl")
-# set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=skylake -Ofast -std=c++14 -fPIC -lmimalloc -mtune=skylake -ftree-vectorize -funroll-loops -ffast-math -mavx -mavx512f -mavx512vl")
+# set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -Ofast -std=c++14 -fPIC -lmimalloc -mtune=native -ftree-vectorize -funroll-loops -ffast-math -mavx -mavx512f -mavx512vl")
+set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=skylake-avx512 -Ofast -std=c++14 -fPIC -lmimalloc -mtune=skylake-avx512 -ftree-vectorize -funroll-loops -ffast-math -mavx -mavx512f -mavx512vl")
 # set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -Wall -march=native -Ofast -std=c++14 -fPIC -lmimalloc -mtune=native -ftree-vectorize -funroll-loops -ffast-math -mavx -mavx512f")
 
 find_package(OpenMP REQUIRED)
@@ -20,10 +20,10 @@ find_package(mimalloc REQUIRED)
 
 set(LIB_SRC kgraph.cpp metric.cpp)
 include_directories(${KGRAPH_SOURCE_DIR})
-add_library(kgraph SHARED ${LIB_SRC})
-target_link_libraries(kgraph PUBLIC mimalloc)
+# add_library(kgraph SHARED ${LIB_SRC})
+# target_link_libraries(kgraph PUBLIC mimalloc)
 add_library(kgrapha STATIC ${LIB_SRC})
-target_link_libraries(kgraph PUBLIC mimalloc)
+# target_link_libraries(kgraph PUBLIC mimalloc)
 set_target_properties(kgrapha PROPERTIES OUTPUT_NAME kgraph)
 add_executable(index index.cpp)
 # add_executable(search search.cpp)
@@ -34,7 +34,7 @@ foreach(TOOL ${TOOLS})
 endforeach(TOOL)
 install (FILES kgraph.h kgraph-data.h DESTINATION include) 
 install (TARGETS 
-kgraph 
+# kgraph 
 kgrapha
 	 LIBRARY DESTINATION lib
 	 ARCHIVE DESTINATION lib)

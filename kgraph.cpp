@@ -32,6 +32,7 @@ static char const *kgraph_version = STRINGIFY(KGRAPH_VERSION) "-" STRINGIFY(KGRA
 #include <boost/accumulators/statistics/moment.hpp>
 #include "boost/smart_ptr/detail/spinlock.hpp"
 #include "kgraph.h"
+#include "kgraph-data.h"
 
 namespace kgraph {
 
@@ -1034,7 +1035,11 @@ private:
 #pragma omp for
                 for (unsigned n = 0; n < N; ++n) {
                     auto &nhood = nhoods[n];
+                    // prefetch_vector_l2((char *)nhood.nn_new.data(), nhoods[n].nn_new.size() * sizeof(uint32_t));
+                    // prefetch_vector_l2((char *)random.data(), nhoods[n].nn_new.size() * sizeof(uint32_t));
+                    // _mm_prefetch((char *)random.data(), _MM_HINT_T0);
                     Neighbors &pool = nhood.pool;
+                    // prefetch_vector_l2((char *)pool.data(), sizeof(Neighbor));
                     GenRandom(rng, &nhood.nn_new[0], nhood.nn_new.size(), N); // at the beginning all random
                     GenRandom(rng, &random[0], random.size(), N);
                     nhood.L = params.L;
@@ -1056,11 +1061,20 @@ private:
             for (unsigned n = 0; n < oracle.size(); ++n) {
                 size_t uu = 0;
                 nhoods[n].found = false;
+                // prefetch_vector_l2((char *)nhoods[n].nn_new.data(), nhoods[n].nn_new.size() * sizeof(uint32_t));
+                // prefetch_vector_l2((char *)nhoods[n].nn_old.data(), nhoods[n].nn_new.size() * sizeof(uint32_t));
+                // prefetch_vector((char *)nhoods[n].pool.data(), nhoods[n].pool.size() * sizeof(Neighbor));
+                // _mm_prefetch((char *)nhoods[n].nn_new.data(), _MM_HINT_T1);
+                // _mm_prefetch((char *)nhoods[n].nn_old.data(), _MM_HINT_T1);
                 nhoods[n].join([&](unsigned i, unsigned j) {
                         float dist = oracle(i, j);
                         unsigned r;
+                        // prefetch_vector_l2((char *)nhoods[i].pool.data(), nhoods[n].pool.size() * sizeof(Neighbor));
+                        // _mm_prefetch((char *)nhoods[i].pool.data(), _MM_HINT_T0);
                         r = nhoods[i].parallel_try_insert(j, dist);
                         if (r < params.K) ++uu;
+                        // prefetch_vector_l2((char *)nhoods[j].pool.data(), nhoods[n].pool.size() * sizeof(Neighbor));
+                        // _mm_prefetch((char *)nhoods[j].pool.data(), _MM_HINT_T0);
                         nhoods[j].parallel_try_insert(i, dist);
                         if (r < params.K) ++uu;
                 });
@@ -1109,6 +1123,8 @@ inline  void update (unsigned& inter_count) {
                 for (unsigned l = 0; l < nhood.M; ++l) {
                     auto &nn = nhood.pool[l];
                     auto &nhood_o = nhoods[nn.id];  // nhood on the other side of the edge
+                    // _mm_prefetch((char *)&nhood_o.rnn_new.back(), _MM_HINT_NTA);
+                    // _mm_prefetch((char *)&nhood_o.rnn_old.back(), _MM_HINT_NTA);
                     if (nn.flag) {
                         nn_new.push_back(nn.id);
                         if (nhood_o.rnn_new.size() < params.R && nn.dist > nhood_o.radiusM) { // maybe detect valuable neighbor via radiusM

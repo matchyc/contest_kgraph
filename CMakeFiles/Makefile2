@@ -63,7 +63,6 @@ CMAKE_BINARY_DIR = /home/cm/projects/ann/sigmodcontest/baseline/kgraph
 # Directory level rules for the build root directory
 
 # The main recursive "all" target.
-all: CMakeFiles/kgraph.dir/all
 all: CMakeFiles/kgrapha.dir/all
 all: CMakeFiles/index.dir/all
 .PHONY : all
@@ -73,36 +72,9 @@ preinstall:
 .PHONY : preinstall
 
 # The main recursive "clean" target.
-clean: CMakeFiles/kgraph.dir/clean
 clean: CMakeFiles/kgrapha.dir/clean
 clean: CMakeFiles/index.dir/clean
 .PHONY : clean
-
-#=============================================================================
-# Target rules for target CMakeFiles/kgraph.dir
-
-# All Build rule for target.
-CMakeFiles/kgraph.dir/all:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/kgraph.dir/build.make CMakeFiles/kgraph.dir/depend
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/kgraph.dir/build.make CMakeFiles/kgraph.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/cm/projects/ann/sigmodcontest/baseline/kgraph/CMakeFiles --progress-num=3,4,5 "Built target kgraph"
-.PHONY : CMakeFiles/kgraph.dir/all
-
-# Build rule for subdir invocation for target.
-CMakeFiles/kgraph.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/cm/projects/ann/sigmodcontest/baseline/kgraph/CMakeFiles 3
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/kgraph.dir/all
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/cm/projects/ann/sigmodcontest/baseline/kgraph/CMakeFiles 0
-.PHONY : CMakeFiles/kgraph.dir/rule
-
-# Convenience name for target.
-kgraph: CMakeFiles/kgraph.dir/rule
-.PHONY : kgraph
-
-# clean rule for target.
-CMakeFiles/kgraph.dir/clean:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/kgraph.dir/build.make CMakeFiles/kgraph.dir/clean
-.PHONY : CMakeFiles/kgraph.dir/clean
 
 #=============================================================================
 # Target rules for target CMakeFiles/kgrapha.dir
@@ -111,7 +83,7 @@ CMakeFiles/kgraph.dir/clean:
 CMakeFiles/kgrapha.dir/all:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/kgrapha.dir/build.make CMakeFiles/kgrapha.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/kgrapha.dir/build.make CMakeFiles/kgrapha.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/cm/projects/ann/sigmodcontest/baseline/kgraph/CMakeFiles --progress-num=6,7,8 "Built target kgrapha"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/cm/projects/ann/sigmodcontest/baseline/kgraph/CMakeFiles --progress-num=3,4,5 "Built target kgrapha"
 .PHONY : CMakeFiles/kgrapha.dir/all
 
 # Build rule for subdir invocation for target.
