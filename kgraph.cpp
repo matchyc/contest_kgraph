@@ -1079,7 +1079,7 @@ inline  void update (unsigned& inter_count) {
 //                 nhood.radius = nhood.pool.back().dist;
 //             }
             //!!! compute radius2
-#pragma omp parallel for
+#pragma omp parallel for schedule(dynamic, 100)
             for (unsigned n = 0; n < N; ++n) {
                 auto &nhood = nhoods[n];
                 nhood.clear_all();

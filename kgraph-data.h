@@ -15,8 +15,8 @@
 
 #ifdef __GNUC__
 #ifdef __AVX__
-#define KGRAPH_MATRIX_ALIGN 1
-// #define KGRAPH_MATRIX_ALIGN 32
+// #define KGRAPH_MATRIX_ALIGN 1
+#define KGRAPH_MATRIX_ALIGN 32
 // #define KGRAPH_MATRIX_ALIGN 64
 #else
 #ifdef __SSE2__
@@ -28,23 +28,24 @@
 #endif
 
 namespace kgraph {
-                            // NOTE :: good efficiency when total_vec_size is integral multiple of 64
+    // NOTE :: good efficiency when total_vec_size is integral multiple of 64
     inline void prefetch_vector(const char* vec, size_t vecsize) {
-        size_t max_prefetch_size = (vecsize / 52) * 52;
-        for (size_t d = 0; d < max_prefetch_size; d += 52)
+        size_t max_prefetch_size = (vecsize / 32) * 32;
+        for (size_t d = 0; d < max_prefetch_size; d += 32)
         _mm_prefetch((const char*) vec + d, _MM_HINT_T0);
     }
 
     // NOTE :: good efficiency when total_vec_size is integral multiple of 64
     inline void prefetch_vector_l2(const char* vec, size_t vecsize) {
-        size_t max_prefetch_size = (vecsize / 52) * 52;
-        for (size_t d = 0; d < max_prefetch_size; d += 52)
+        size_t max_prefetch_size = (vecsize / 32) * 32;
+        for (size_t d = 0; d < max_prefetch_size; d += 32)
         _mm_prefetch((const char*) vec + d, _MM_HINT_T1);
     }
 
     /// L2 square distance with AVX instructions.
     /** AVX instructions have strong alignment requirement for t1 and t2.
      */
+    extern float avx512_l2_distance_opt(float const * a, float const * b, unsigned n);
     extern float avx2_l2_distance(float const* a, float const* b, unsigned dim);
     extern float float_l2sqr_avx_opt(float const* t1, float const* t2, unsigned dim);
     extern float float_l2sqr_avx (float const *t1, float const *t2, unsigned dim);
@@ -132,6 +133,7 @@ namespace kgraph {
             } else {
                 data = (char *)mi_malloc(row * stride);
             }
+            zero();
             if (!data) throw runtime_error("memalign");
             std::cout << "Read data: num_pts = " << row << " aligned_space = " << stride << "\n";
         }
@@ -156,6 +158,8 @@ namespace kgraph {
             reset(r, c);
         }
         T const *operator [] (unsigned i) const {
+            prefetch_vector((const char *)&data[stride * i], stride);
+            // prefetch_vector_l2((const char *)&data[stride * i], stride);
             return reinterpret_cast<T const *>(&data[stride * i]);
         }
         T *operator [] (unsigned i) {
@@ -307,8 +311,8 @@ namespace kgraph {
             return proxy.size();
         }
         virtual float operator () (unsigned i, unsigned j) const {
-            // prefetch_vector((const char *) proxy[i], sizeof(DATA_TYPE) * proxy.dim());
-            // prefetch_vector((const char *) proxy[j], sizeof(DATA_TYPE) * proxy.dim());
+            // prefetch_vector((const char *) proxy[i], 400);
+            // prefetch_vector((const char *) proxy[j], 400);
             return DIST_TYPE::apply(proxy[i], proxy[j], proxy.dim());
         }
         SearchOracle query (DATA_TYPE const *query) const {
@@ -356,15 +360,16 @@ namespace kgraph {
 #ifndef KGRAPH_NO_VECTORIZE
 #ifdef __GNUC__
 #ifdef __AVX__
-#if 0
+#if 1
 namespace kgraph { namespace metric {
         template <>
         inline float l2sqr::apply<float> (float const *t1, float const *t2, unsigned dim) {
             // std::cout << "use avx distance" << std::endl;
-            // return avx2_l2_distance(t1, t2, dim);
-            return float_l2sqr_avx(t1, t2, dim);
+            return avx2_l2_distance(t1, t2, dim);
+            // return float_l2sqr_avx(t1, t2, dim);f
             // return float_l2sqr_avx_opt(t1, t2, dim);
             // return avx512_l2_distance(t1, t2, dim);
+            // return avx512_l2_distance_opt(t1, t2, dim);
         }
 }}
 #endif

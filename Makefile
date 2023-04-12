@@ -200,19 +200,6 @@ index/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/index.dir/build.make CMakeFiles/index.dir/build
 .PHONY : index/fast
 
-#=============================================================================
-# Target rules for targets named search
-
-# Build rule for target.
-search: cmake_check_build_system
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 search
-.PHONY : search
-
-# fast build rule for target.
-search/fast:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/search.dir/build.make CMakeFiles/search.dir/build
-.PHONY : search/fast
-
 index.o: index.cpp.o
 .PHONY : index.o
 
@@ -291,30 +278,6 @@ metric.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/kgrapha.dir/build.make CMakeFiles/kgrapha.dir/metric.cpp.s
 .PHONY : metric.cpp.s
 
-search.o: search.cpp.o
-.PHONY : search.o
-
-# target to build an object file
-search.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/search.dir/build.make CMakeFiles/search.dir/search.cpp.o
-.PHONY : search.cpp.o
-
-search.i: search.cpp.i
-.PHONY : search.i
-
-# target to preprocess a source file
-search.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/search.dir/build.make CMakeFiles/search.dir/search.cpp.i
-.PHONY : search.cpp.i
-
-search.s: search.cpp.s
-.PHONY : search.s
-
-# target to generate assembly for a file
-search.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/search.dir/build.make CMakeFiles/search.dir/search.cpp.s
-.PHONY : search.cpp.s
-
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -330,7 +293,6 @@ help:
 	@echo "... index"
 	@echo "... kgraph"
 	@echo "... kgrapha"
-	@echo "... search"
 	@echo "... index.o"
 	@echo "... index.i"
 	@echo "... index.s"
@@ -340,9 +302,6 @@ help:
 	@echo "... metric.o"
 	@echo "... metric.i"
 	@echo "... metric.s"
-	@echo "... search.o"
-	@echo "... search.i"
-	@echo "... search.s"
 .PHONY : help
 
 

@@ -6,5 +6,5 @@ CXX_DEFINES = -DBOOST_CHRONO_DYN_LINK -DBOOST_CHRONO_NO_LIB -DBOOST_PROGRAM_OPTI
 
 CXX_INCLUDES = -I/home/cm/projects/ann/sigmodcontest/baseline/kgraph -isystem /home/cm/miniconda3/envs/py38/include -isystem /usr/local/include/mimalloc-2.1
 
-CXX_FLAGS =  -Wall -march=native -Ofast -std=c++14 -fPIC -lmimalloc -mtune=native -ftree-vectorize -funroll-loops -ffast-math -fopenmp -O3 -DNDEBUG -std=gnu++14
+CXX_FLAGS =  -march=native -Ofast -std=c++14 -fPIC -lmimalloc -mtune=native -ftree-vectorize -funroll-loops -ffast-math -mavx -mavx512f -mavx512vl -fopenmp -O3 -DNDEBUG -std=gnu++14
 

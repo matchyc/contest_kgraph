@@ -1,7 +1,6 @@
 /home/cm/projects/ann/sigmodcontest/baseline/kgraph/CMakeFiles/kgraph.dir
 /home/cm/projects/ann/sigmodcontest/baseline/kgraph/CMakeFiles/kgrapha.dir
 /home/cm/projects/ann/sigmodcontest/baseline/kgraph/CMakeFiles/index.dir
-/home/cm/projects/ann/sigmodcontest/baseline/kgraph/CMakeFiles/search.dir
 /home/cm/projects/ann/sigmodcontest/baseline/kgraph/CMakeFiles/edit_cache.dir
 /home/cm/projects/ann/sigmodcontest/baseline/kgraph/CMakeFiles/rebuild_cache.dir
 /home/cm/projects/ann/sigmodcontest/baseline/kgraph/CMakeFiles/list_install_components.dir
