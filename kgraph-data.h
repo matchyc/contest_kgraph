@@ -30,9 +30,7 @@
 namespace kgraph {
     // NOTE :: good efficiency when total_vec_size is integral multiple of 64
     inline void prefetch_vector(const char* vec, size_t vecsize) {
-        // size_t max_prefetch_size = (vecsize / 32) * 32;
-        // for (size_t d = 0; d < max_prefetch_size; d += 32)
-        // _mm_prefetch((const char*) vec + d, _MM_HINT_T0);
+
         size_t max_prefetch_size = (vecsize / 64) * 64;
         for (size_t d = 0; d < max_prefetch_size; d += 64)
         _mm_prefetch((const char*) vec + d, _MM_HINT_T0);
@@ -48,9 +46,19 @@ namespace kgraph {
         _mm_prefetch((const char*) vec + d, _MM_HINT_T1);
     }
 
+    inline void prefetch_vector_l3(const char* vec, size_t vecsize) {
+        // size_t max_prefetch_size = (vecsize / 32) * 32;
+        // for (size_t d = 0; d < max_prefetch_size; d += 32)
+        // _mm_prefetch((const char*) vec + d, _MM_HINT_T1);
+        size_t max_prefetch_size = (vecsize / 64) * 64;
+        for (size_t d = 0; d < max_prefetch_size; d += 64)
+        _mm_prefetch((const char*) vec + d, _MM_HINT_T2);
+    }
+
     /// L2 square distance with AVX instructions.
     /** AVX instructions have strong alignment requirement for t1 and t2.
      */
+    // extern float avx512_l2_dist_v2 (const float *x, const float *y, unsigned d);
     extern float avx512_l2_distance_opt(float const * a, float const * b, unsigned n);
     extern float avx2_l2_distance(float const* a, float const* b, unsigned dim);
     extern float float_l2sqr_avx_opt(float const* t1, float const* t2, unsigned dim);
@@ -135,8 +143,10 @@ namespace kgraph {
             if (data) free(data);
             // data = (char *)memalign(A, row * stride); // SSE instruction needs data to be aligned
             if (A != 1) {
+                // data = (char *)memalign(A, row * stride); // SSE instruction needs data to be aligned
                 data = (char *)mi_aligned_alloc(A, row * stride); // SSE instruction needs data to be aligned
             } else {
+                // data = (char *)memalign(A, row * stride); // SSE instruction needs data to be aligned
                 data = (char *)mi_malloc(row * stride);
             }
             zero();
@@ -165,6 +175,7 @@ namespace kgraph {
         }
         T const *operator [] (unsigned i) const {
             prefetch_vector((const char *)&data[stride * i], stride);
+            // _mm_prefetch((const char*)&data[stride * i], _MM_HINT_T0);
             // prefetch_vector_l2((const char *)&data[stride * i], stride);
             return reinterpret_cast<T const *>(&data[stride * i]);
         }
@@ -317,8 +328,8 @@ namespace kgraph {
             return proxy.size();
         }
         virtual float operator () (unsigned i, unsigned j) const {
-            // prefetch_vector((const char *) proxy[i], 400);
-            // prefetch_vector((const char *) proxy[j], 400);
+            // prefetch_vector((const char *) proxy[i], 448);
+            // prefetch_vector((const char *) proxy[j], 448);
             return DIST_TYPE::apply(proxy[i], proxy[j], proxy.dim());
         }
         SearchOracle query (DATA_TYPE const *query) const {
@@ -376,6 +387,7 @@ namespace kgraph { namespace metric {
             // return float_l2sqr_avx_opt(t1, t2, dim);
             // return avx512_l2_distance(t1, t2, dim);
             return avx512_l2_distance_opt(t1, t2, dim);
+            // return avx512_l2_dist_v2(t1, t2, dim);
         }
 }}
 #endif
@@ -384,7 +396,7 @@ namespace kgraph { namespace metric {
 namespace kgraph { namespace metric {
         template <>
         inline float l2sqr::apply<float> (float const *t1, float const *t2, unsigned dim) {
-            std::cout << "use sse2" << '\n';
+            // std::cout << "use sse2" << '\n';
             // return float_dot_sse2(t1, t2, dim);
             return float_l2sqr_sse2(t1, t2, dim);
         }

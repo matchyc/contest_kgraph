@@ -10,7 +10,8 @@
 #define STRINGIFY(x) STRINGIFY_HELPER(x)
 #define STRINGIFY_HELPER(x) #x
 static char const *kgraph_version = STRINGIFY(KGRAPH_VERSION) "-" STRINGIFY(KGRAPH_BUILD_NUMBER) "," STRINGIFY(KGRAPH_BUILD_ID);
-
+#define likely(x)       __builtin_expect((x),1)
+#define unlikely(x)     __builtin_expect((x),0)
 #ifdef _OPENMP
 #include <omp.h>
 #endif
@@ -30,6 +31,8 @@ static char const *kgraph_version = STRINGIFY(KGRAPH_VERSION) "-" STRINGIFY(KGRA
 #include <boost/accumulators/statistics/stats.hpp>
 #include <boost/accumulators/statistics/mean.hpp>
 #include <boost/accumulators/statistics/moment.hpp>
+// #include <boost/circular_buffer.hpp>
+#include <atomic>
 #include "boost/smart_ptr/detail/spinlock.hpp"
 #include "kgraph.h"
 #include "kgraph-data.h"
@@ -44,6 +47,17 @@ namespace kgraph {
 
     typedef boost::detail::spinlock Lock;
     typedef std::lock_guard<Lock> LockGuard;
+
+    
+// inline bool fifty_fifty() {
+//     // 50% probability return true
+//     static std::mt19937 rng(std::random_device{}());
+//     static std::bernoulli_distribution dist(0.5);
+    
+//     return dist(rng);
+// }
+
+
 
     // generate size distinct random numbers < N
     // template <typename RNG, unsigned BN = MAX_N>
@@ -200,6 +214,7 @@ namespace kgraph {
 //         // optimize with memmove
 //         unsigned j;
 //         unsigned i = K;
+
 //         while (i > 0) {
 //             j = i - 1;
 //             if (addr[j].dist <= nn.dist) break;
@@ -214,25 +229,36 @@ namespace kgraph {
 //             l = j;
 //         }
 //         // i <= K-1
-//         j = K;
+//         // j = K;
 //         // while (j > i) {
 //         //     addr[j] = addr[j-1];
 //         //     --j;
 //         // }
-//         std::memmove(addr + i + 1, addr + i, (j - i) * sizeof(NeighborT));
+//         std::memmove(addr + i + 1, addr + i, (K - i) * sizeof(NeighborT));
 
 //         addr[i] = nn;
 //         return i;
+//     }
+//     template <typename NeighborT>
+// inline  unsigned UpdateKnnListHelper (std::vector<NeighborT>& addr, unsigned& K, NeighborT nn) {
+//         auto it = std::lower_bound(addr.begin(), addr.end(), nn);
+//         if (it != addr.end() && it->id != nn.id) {
+//             addr.insert(it, nn);
+//             if (addr.size() > K) {
+//                 addr.erase(addr.end() - 1);
+//             }
+//         }
+//         return static_cast<unsigned>(std::distance(addr.begin(), it));
 //     }
     template <typename NeighborT>
 inline  unsigned UpdateKnnListHelper (NeighborT *addr, unsigned& K, NeighborT nn) {
         // optimize with memmove, binary search
         unsigned i = 0, j = K;
         while (i < j) {
-            unsigned m = (i + j) / 2;
-            if (nn.dist > addr[m].dist) {
+            unsigned m = (i + j) >> 1;
+            if (likely(nn.dist > addr[m].dist)) {
                 i = m + 1;
-            } else if (nn.dist < addr[m].dist) {
+            } else if (unlikely(nn.dist < addr[m].dist)) {
                 j = m;
             } else { // handle equal distances
                 if (nn.id == addr[m].id) {
@@ -244,35 +270,25 @@ inline  unsigned UpdateKnnListHelper (NeighborT *addr, unsigned& K, NeighborT nn
                 }
             }
         }
-
+        // unsigned l = i;
+        // while (l > 0) {
+        //     j = l - 1;
+        //     if (addr[j].dist < nn.dist) break;
+        //     if (addr[j].id == nn.id) return K + 1;
+        //     l = j;
+        // }
         std::memmove(addr + i + 1, addr + i, (K - i) * sizeof(NeighborT));
 
         addr[i] = nn;
         return i;
     }
-    // inline unsigned UpdateKnnListHelper(NeighborT* addr, unsigned& K, const NeighborT& nn) {
-    //     // Find the correct position to insert the new neighbor
-    //     unsigned i = 0;
-    //     while (i < K && addr[i].dist <= nn.dist) {
-    //         if (addr[i].id == nn.id) {
-    //             return K; // neighbor with same ID already exists
-    //         }
-    //         ++i;
-    //     }
 
-    //     // Shift the existing neighbors one position to the right to make room for the new neighbor
-    //     std::copy_backward(addr + i, addr + K, addr + K + 1);
-
-    //     // Insert the new neighbor at the correct position
-    //     addr[i] = nn;
-
-    //     // Update the number of neighbors
-    //     ++K;
-
-    //     return i;
-    // }
     
+    // static inline unsigned UpdateKnnList (std::vector<Neighbor>& addr, unsigned K, Neighbor nn) {
+    //     return UpdateKnnListHelper<Neighbor>(addr, K, nn);
+    // }
     static inline unsigned UpdateKnnList (Neighbor *addr, unsigned K, Neighbor nn) {
+        prefetch_vector((char *)addr, K * sizeof(Neighbor));
         return UpdateKnnListHelper<Neighbor>(addr, K, nn);
     }
 
@@ -295,29 +311,42 @@ inline  unsigned UpdateKnnListHelper (NeighborT *addr, unsigned& K, NeighborT nn
         vector<unsigned> nn_new;
         vector<unsigned> rnn_old;
         vector<unsigned> rnn_new;
+        // std::atomic<uint32_t> hub_score;
+        // boost::circular_buffer<uint32_t> expel_keep;
         
         void clear_all() {
-            nn_old.clear();
-            nn_new.clear();
-            rnn_old.clear();
-            rnn_new.clear();
+            // nn_old.clear();
+            // nn_new.clear();
+            // rnn_old.clear();
+            // rnn_new.clear();
+            // nn_old.shrink_to_fit();
+            // nn_new.shrink_to_fit();
+            // rnn_old.shrink_to_fit();
+            // rnn_new.shrink_to_fit();
+            std::vector<uint32_t>().swap(nn_old);
+            std::vector<uint32_t>().swap(nn_new);
+            std::vector<uint32_t>().swap(rnn_old);
+            std::vector<uint32_t>().swap(rnn_new);
+            radius = pool.back().dist;
         }
         // only non-readonly method which is supposed to be called in parallel
-        unsigned parallel_try_insert (unsigned id, float dist) {
+        unsigned parallel_try_insert (unsigned id, float& dist) {
             if (dist > radius) {
-                // if (dist < radius * 1.05) {
-                //     pool[pool.size() - 1] = Neighbor(id, dist, true);
-                //     radius = dist;
-                // }
                 return pool.size();
             }
+
+            // prefetch_vector((char *)&pool, L * sizeof(Neighbor));
+            // _mm_prefetch(&pool, _MM_HINT_ET0);
             LockGuard guard(lock);
+            // expel_keep.push_back(pool.back().id);
             unsigned l = UpdateKnnList(&pool[0], L, Neighbor(id, dist, true));
+            // unsigned l = UpdateKnnList(pool, L, Neighbor(id, dist, true));
             if (l <= L) { // inserted
                 if (L + 1 < pool.size()) { // if l == L + 1, there's a duplicate
                     ++L;
                 }
                 else {
+                    // expel_keep.pop_back();
                     radius = pool[L-1].dist;
                 }
             }
@@ -326,7 +355,7 @@ inline  unsigned UpdateKnnListHelper (NeighborT *addr, unsigned& K, NeighborT nn
 
         // join should not be conflict with insert
     //     template <typename C>
-    // inline void join (C callback) const {
+    // inline void join (uint32_t& iter, C callback) const {
     //         for (unsigned const i: nn_new) {
     //             for (unsigned const j: nn_new) {
     //                 if (i < j) {
@@ -338,17 +367,30 @@ inline  unsigned UpdateKnnListHelper (NeighborT *addr, unsigned& K, NeighborT nn
     //             }
     //         }
     //     }
-    template <typename C>
-    inline void join (C callback) const {
-        for (unsigned i = 0; i < nn_new.size(); ++i) {
-            for (unsigned j = i + 1; j < nn_new.size(); ++j) {
-                callback(nn_new[i], nn_new[j]);
-            }
-            for (unsigned j = 0; j < nn_old.size(); ++j) {
-                callback(nn_new[i], nn_old[j]);
-            }
-        }
-    }
+
+    // template <typename C>
+    // inline void join (uint32_t& iter, C callback) const {
+    //     for (unsigned i = 0; i < nn_new.size(); ++i) {
+    //         for (unsigned j = i + 1; j < nn_new.size(); ++j) {
+    //             callback(nn_new[i], nn_new[j]);
+    //         }
+    //         for (unsigned j = 0; j < nn_old.size(); ++j) {
+    //             callback(nn_new[i], nn_old[j]);
+    //         }
+    //     }
+    // }
+
+    // template <typename C>
+    // void join (size_t& uu) const {
+    //     for (unsigned i = 0; i < nn_new.size(); ++i) {
+    //         for (unsigned j = i + 1; j < nn_new.size(); ++j) {
+    //             inner_join_func(uu, nn_new[i], nn_new[j]);
+    //         }
+    //         for (unsigned j = 0; j < nn_old.size(); ++j) {
+    //             inner_join_func(uu, nn_new[i], nn_old[j]);
+    //         }
+    //     }
+    // }
 
     };
 
@@ -418,6 +460,7 @@ inline  void LinearSearch (IndexOracle const &oracle, unsigned i, unsigned K, ve
 
     class KGraphImpl: public KGraph {
     protected:
+        // std::bitset<10000000> hub_mask;
         vector<unsigned> M;
         vector<vector<Neighbor>> graph;
         vector<Nhood> nhoods;
@@ -477,21 +520,21 @@ inline  void LinearSearch (IndexOracle const &oracle, unsigned i, unsigned K, ve
         }
 
         virtual void save (char const *path, int format) const {
-            if (format == FORMAT_TEXT) {
-                std::cerr << "Saving to text file; you won't be able to load text file." << std::endl;
-                ofstream os(path);
-                os << graph.size() << endl;
-                for (unsigned i = 0; i < graph.size(); ++i) {
-                    auto const &knn = graph[i];
-                    uint32_t K = knn.size();
-                    os << K;
-                    for (unsigned k = 0; k < K; ++k) {
-                        os << ' ' << knn[k].id << ' ' << knn[k].dist;
-                    }
-                    os << endl;
-                }
-                return;
-            }
+            // if (format == FORMAT_TEXT) {
+            //     std::cerr << "Saving to text file; you won't be able to load text file." << std::endl;
+            //     ofstream os(path);
+            //     os << graph.size() << endl;
+            //     for (unsigned i = 0; i < graph.size(); ++i) {
+            //         auto const &knn = graph[i];
+            //         uint32_t K = knn.size();
+            //         os << K;
+            //         for (unsigned k = 0; k < K; ++k) {
+            //             os << ' ' << knn[k].id << ' ' << knn[k].dist;
+            //         }
+            //         os << endl;
+            //     }
+            //     return;
+            // }
             ofstream os(path, ios::binary | ios::trunc);
             // uint32_t N = graph.size();
             // os.write(KGRAPH_MAGIC, KGRAPH_MAGIC_SIZE);
@@ -969,7 +1012,7 @@ public:
                 auto& nhood = nhoods[i];
                 auto& pool = nhood.pool;
                 nhood.L = params.L;
-                nhood.M = params.S;
+                nhood.M = params.L;
                 // std::vector<uint32_t> random(pool.size() - K);
                 std::vector<uint32_t> random(pool.size());
                 // GenRandom(rng, &nhood.nn_new[0], nhood.nn_new.size(), N);
@@ -1017,6 +1060,7 @@ private:
             unsigned seed = params.seed;
             mt19937 rng(seed);
             for (auto &nhood: nhoods) {
+                // nhood.expel_keep.set_capacity(20);
                 nhood.nn_new.resize(params.S * 2);
                 nhood.pool.resize(params.L + 1);
                 nhood.radius = numeric_limits<float>::max();
@@ -1056,33 +1100,67 @@ private:
                 }
             }
         }
-        void join () {
-#pragma omp parallel for schedule(dynamic, 1)
+        // void inner_join_func(size_t& uu, unsigned i, unsigned j) {
+        //     float dist = oracle(i, j);
+        //                 unsigned r;
+        //                 r = nhoods[i].parallel_try_insert(j, dist);
+        //                 if (r < params.K) {
+        //                     ++uu;
+        //                 }
+        //                 nhoods[j].parallel_try_insert(i, dist);
+        //                 if (r < params.K) {
+        //                     ++uu;
+        //                 }
+        // }
+    inline void inner_join_func(size_t& uu, unsigned i, unsigned j) {
+            float dist = oracle(i, j);
+            unsigned r;
+            // _mm_prefetch((char *)&nhoods[i].radius, _MM_HINT_NTA);
+            r = nhoods[i].parallel_try_insert(j, dist);
+            if (r < params.K) {
+                // nhoods[j].hub_score.fetch_add(1, std::memory_order_relaxed);
+                ++uu;
+            }
+            nhoods[j].parallel_try_insert(i, dist);
+            if (r < params.K) {
+                // nhoods[i].hub_score.fetch_add(1, std::memory_order_relaxed);
+                ++uu;
+            }
+        }
+
+        void join (IndexInfo& info) {
+#pragma omp parallel for schedule(dynamic, 100)
             for (unsigned n = 0; n < oracle.size(); ++n) {
                 size_t uu = 0;
                 nhoods[n].found = false;
-                // prefetch_vector_l2((char *)nhoods[n].nn_new.data(), nhoods[n].nn_new.size() * sizeof(uint32_t));
-                // prefetch_vector_l2((char *)nhoods[n].nn_old.data(), nhoods[n].nn_new.size() * sizeof(uint32_t));
-                // prefetch_vector((char *)nhoods[n].pool.data(), nhoods[n].pool.size() * sizeof(Neighbor));
-                // _mm_prefetch((char *)nhoods[n].nn_new.data(), _MM_HINT_T1);
-                // _mm_prefetch((char *)nhoods[n].nn_old.data(), _MM_HINT_T1);
-                nhoods[n].join([&](unsigned i, unsigned j) {
-                        float dist = oracle(i, j);
-                        unsigned r;
-                        // prefetch_vector_l2((char *)nhoods[i].pool.data(), nhoods[n].pool.size() * sizeof(Neighbor));
-                        // _mm_prefetch((char *)nhoods[i].pool.data(), _MM_HINT_T0);
-                        r = nhoods[i].parallel_try_insert(j, dist);
-                        if (r < params.K) ++uu;
-                        // prefetch_vector_l2((char *)nhoods[j].pool.data(), nhoods[n].pool.size() * sizeof(Neighbor));
-                        // _mm_prefetch((char *)nhoods[j].pool.data(), _MM_HINT_T0);
-                        nhoods[j].parallel_try_insert(i, dist);
-                        if (r < params.K) ++uu;
-                });
+                auto& nn_new = nhoods[n].nn_new;
+                auto& nn_old = nhoods[n].nn_old;
+
+                for (unsigned i = 0; i < nn_new.size(); ++i) {
+                    for (unsigned j = i + 1; j < nn_new.size(); ++j) {
+                        if (unlikely(nn_new[i] != nn_new[j])) {
+                            inner_join_func(uu, nn_new[i], nn_new[j]);
+                        }
+                    }
+                    for (unsigned j = 0; j < nn_old.size(); ++j) {
+                        if (unlikely(nn_new[i] != nn_old[j])) {
+                            inner_join_func(uu, nn_new[i], nn_old[j]);
+                        }
+                    }
+                }
+
                 nhoods[n].found = uu > 0;
             }
         }
-inline  void update (unsigned& inter_count) {
+inline  void update (IndexInfo& info) {
             unsigned N = oracle.size();
+            // std::atomic<int> sum_new_size;
+            // std::atomic<int> sum_old_size;
+            // sum_new_size.store(0);
+            // sum_old_size.store(0);
+            std::vector<uint32_t> permut(N);
+            std::iota(permut.begin(), permut.end(), 0);
+            std::random_shuffle(permut.begin(), permut.end());
 
 // #pragma omp parallel for
 //             for (auto &nhood: nhoods) {
@@ -1092,13 +1170,13 @@ inline  void update (unsigned& inter_count) {
 //                 nhood.rnn_old.clear();
 //                 nhood.radius = nhood.pool.back().dist;
 //             }
-            //!!! compute radius2
 #pragma omp parallel for schedule(dynamic, 100)
             for (unsigned n = 0; n < N; ++n) {
+            // for (unsigned &n: permut) {
                 auto &nhood = nhoods[n];
                 nhood.clear_all();
-                if (nhood.found) {
-                    // if (inter_count <= 1) {
+                // if (nhood.found) {
+                    // if (info.iterations >= 2) {
                     //     unsigned maxl = std::min(nhood.M + params.S, nhood.L);
                     //     unsigned c = 0;
                     //     unsigned l = 0;
@@ -1107,16 +1185,36 @@ inline  void update (unsigned& inter_count) {
                     //         ++l;
                     //     }
                     //     nhood.M = l;
-                    // } else {
+                    // } 
+                    // else {
+                        // if (info.iterations >= 2) {
                         nhood.M = nhood.pool.size();
+                        // }
                     // }
-                }
+                // }
                 BOOST_VERIFY(nhood.M > 0);
                 nhood.radiusM = nhood.pool[nhood.M-1].dist;
                 // nhood.radiusM = nhood.pool[25].dist;
+                // if (info.iterations >= 2) {
+                //     if (nhood.hub_score >= 8 * params.K) {
+                //         hub_mask.set(n, 0);
+                //     }
+                // }
             }
+            // uint16_t expect_gen = params.K / 4;
+            // std::random_device rd;
+            // mt19937 rng(rd());
+            // std::uniform_int_distribution<uint32_t> n_dist(0, N-1);
+            // std::mt19937 bool_rng{std::random_device{}()};
+            // std::bernoulli_distribution bool_dist{0.5};   // Generates bool values with 50% chance of true
+            // // std::dist
+            const uint32_t nn_new_limit = params.K;
 #pragma omp parallel for schedule(dynamic, 100)
-            for (unsigned n = 0; n < N; ++n) {
+            // for (unsigned n = 0; n < N; ++n) {
+            for (unsigned &n: permut) {
+
+                // if (info.iterations > 3 && hub_mask.test(n) == 0) continue;
+
                 auto &nhood = nhoods[n];
                 auto &nn_new = nhood.nn_new;
                 auto &nn_old = nhood.nn_old;
@@ -1127,27 +1225,73 @@ inline  void update (unsigned& inter_count) {
                     // _mm_prefetch((char *)&nhood_o.rnn_old.back(), _MM_HINT_NTA);
                     if (nn.flag) {
                         nn_new.push_back(nn.id);
-                        if (nhood_o.rnn_new.size() < params.R && nn.dist > nhood_o.radiusM) { // maybe detect valuable neighbor via radiusM
+                        // if (nn_new.size() < nn_new_limit) {
+                        //     nn_new.push_back(nn.id);
+                        //     // nn.flag = false;
+                        // } 
+                        // else {
+                            // nn_old.push_back(nn.id);
+                        // }
+                        // if (nhood_o.rnn_new.size() < params.R && nn.dist > nhood_o.radiusM) { // maybe detect valuable neighbor via radiusM
+                        if (nn.dist > nhood_o.radiusM) { // maybe detect valuable neighbor via radiusM
                             LockGuard guard(nhood_o.lock);
                             // nhood_o.nn_new.push_back(n);
-                            nhood_o.rnn_new.push_back(n); // undirected, add both
+                            nhood_o.rnn_new.push_back(n); // add reverse
                         }
                         nn.flag = false;
+                        // nn_new.push_back(nn.id);
+                        // if (hub_mask.test(n) == 0) continue;
+                        // if (info.iterations < 5 && fifty_fifty()) {
+                        //     nn.flag = true;
+                        // }
                     }
                     else {
+                        // if (unlikely(info.delta < 6e-5)) {
+                        //         nn_new.push_back(nn.id);
+                        // } else {
+                        //     nn_old.push_back(nn.id);
                         nn_old.push_back(nn.id);
-                        if (nhood_o.rnn_old.size() < params.R && nn.dist > nhood_o.radiusM) {
+                        // if (hub_mask.test(n) == 0) continue;
+                        // if (nhood_o.rnn_old.size() < params.R && nn.dist > nhood_o.radiusM) {
+                        if (nn.dist > nhood_o.radiusM) {
                             LockGuard guard(nhood_o.lock);
                             // nhood_o.nn_old.push_back(n);
                             nhood_o.rnn_old.push_back(n);
                         }
+                            // if (likely(hub_mask.test(nn.id) == 1 && info.iterations == 7)) {
+                            //     if (fifty_fifty()) {
+                            //         nn.flag = true;
+                            //     }
+                            // }
                     }
+
                 }
+                // random join if iter greater than a threshold
+                // if (unlikely(info.delta < 6e-5)) {
+                //     uint16_t pre_last = nn_new.size();
+                //     nn_new.resize(nn_new.size() + expect_gen);
+                //     for (auto& nn: nhood.pool) {
+                //         if (fifty_fifty()) {
+                //             nn_new.push_back(nhoods[nn.id].pool[50].id); 
+                //         }
+                //     }
+                //     //todo pre last occupied the origin data
+                //     // GenRandom(rng, &nn_new[pre_last], nn_new.size() - pre_last, N);
+                // }
+                // if (unlikely(info.delta < 6e-5)) {
+                //     for (auto it = nhood.expel_keep.begin(); it != nhood.expel_keep.end(); ++it) {
+                //         nn_new.push_back(*it);
+                //     }
+                //     nhood.expel_keep.clear();
+                //     // std::copy(nhood.expel_keep.begin(), nhood.expel_keep.end(), nn_new.end());
+                //     //todo pre last occupied the origin data
+                //     // GenRandom(rng, &nn_new[pre_last], nn_new.size() - pre_last, N);
+                // }
             }
-            // std::random_device rd;
-// #pragma omp parallel for
+            std::random_device rd;
+#pragma omp parallel for
             for (unsigned i = 0; i < N; ++i) {
-                // thread_local std::default_random_engine rng(rd());
+                thread_local std::default_random_engine rng(rd());
                 auto &nn_new = nhoods[i].nn_new;
                 auto &nn_old = nhoods[i].nn_old;
                 auto &rnn_new = nhoods[i].rnn_new;
@@ -1156,19 +1300,23 @@ inline  void update (unsigned& inter_count) {
                 // nn_new.reserve(nn_new.size() + params.R);
                 // nn_old.reserve(nn_old.size() + params.R);
 
-                // if ((rnn_new.size() > params.R)) {
-                //     std::shuffle(rnn_new.begin(), rnn_new.end(), rng);
-                //     rnn_new.resize(params.R);
-                // }
+                if ((rnn_new.size() > params.R)) {
+                    std::shuffle(rnn_new.begin(), rnn_new.end(), rng);
+                    rnn_new.resize(params.R);
+                }
 
-                // if ((rnn_old.size() > params.R)) {
-                //     std::shuffle(rnn_old.begin(), rnn_old.end(), rng);
-                //     rnn_old.resize(params.R);
-                // }
+                if ((rnn_old.size() > params.R)) {
+                    std::shuffle(rnn_old.begin(), rnn_old.end(), rng);
+                    rnn_old.resize(params.R);
+                }
 
                 nn_new.insert(nn_new.end(), std::make_move_iterator(rnn_new.begin()), std::make_move_iterator(rnn_new.end()));
                 nn_old.insert(nn_old.end(), std::make_move_iterator(rnn_old.begin()), std::make_move_iterator(rnn_old.end()));
+                // sum_new_size.fetch_add(nn_new.size(), std::memory_order_relaxed);
+                // sum_old_size.fetch_add(nn_old.size(), std::memory_order_relaxed);
             }
+            // std::cout << "sum new size: " << sum_new_size << std::endl;
+            // std::cout << "sum old size: " << sum_old_size << std::endl;
         }
 
 public:
@@ -1177,8 +1325,9 @@ public:
         {
             no_dist = false;
             boost::timer::cpu_timer timer;
+            // hub_mask.set();
             //params.check();
-            unsigned N = oracle.size();
+            const unsigned N = oracle.size();
             // graph_only_ids = std::vector<std::vector<uint32_t>>(N, std::vector<uint32_t>(100, 0));
             if (N <= params.K) throw runtime_error("K larger than dataset size");
             if (N < params.controls) {
@@ -1193,10 +1342,10 @@ public:
                 cerr << "Warning: small dataset, shrinking S to " << (N-1) << "." << endl;
                 params.S = N - 1; 
             }
-            if (params.L < params.S) {
-                cerr << "Warning: L smaller than S, setting L to S." << endl;
-                params.L = params.S;
-            }
+            // if (params.L < params.S) {
+            //     cerr << "Warning: L smaller than S, setting L to S." << endl;
+            //     params.L = params.S;
+            // }
 
             vector<Control> controls(params.controls);
             if (verbosity > 0) cerr << "Generating control..." << endl;
@@ -1222,9 +1371,10 @@ public:
             info.iterations = 0;
             info.delta = 1.0;
             graph.clear();
+            graph.shrink_to_fit();
             for (unsigned it = 0; (params.iterations <= 0) || (it < params.iterations); ++it) {
                 ++info.iterations;
-                join();
+                join(info);
                 // if (info.iterations == 1 && !params.in_graph_path.empty()) {
                 //     ;
                 // } else {
@@ -1268,7 +1418,7 @@ public:
                              << endl;
                     }
                 }
-                if (info.delta <= params.delta) {
+                if (unlikely(info.delta <= params.delta)) {
                     info.stop_condition = IndexInfo::DELTA;
                     break;
                 }
@@ -1277,7 +1427,7 @@ public:
                     break;
                 }
                 if (it < params.iterations) {
-                    update(info.iterations);
+                    update(info);
                 }
                 // update();
             }
@@ -1306,7 +1456,7 @@ public:
 //                 nhoods[n].pool.clear();
 //             }
             // nhoods.clear();
-            std::cout << "check point copy node id" << '\n';
+            // std::cout << "check point copy node id" << '\n';
             if (params.reverse) {
                 reverse(params.reverse);
                 std::cout << "Reversing graph..." << '\n';

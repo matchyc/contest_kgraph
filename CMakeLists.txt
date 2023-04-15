@@ -7,6 +7,8 @@ set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -Ofast -std=c++14 -fPIC -lmimalloc -mtune=native -ftree-vectorize -funroll-loops -ffast-math -mavx -mavx512f -mavx512vl")
 set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=skylake-avx512 -Ofast -std=c++14 -fPIC -lmimalloc -mtune=skylake-avx512 -ftree-vectorize -funroll-loops -ffast-math -mavx -mavx512f -mavx512vl")
+# set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -march=skylake-avx512 -Ofast -std=c++14 -fPIC -lmimalloc -mtune=skylake-avx512 -ftree-vectorize -funroll-loops -ffast-math")
+# set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=skylake -Ofast -std=c++14 -fPIC -lmimalloc -mtune=skylake -ftree-vectorize -funroll-loops -ffast-math -mavx -mavx512f -mavx512vl")
 # set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -Wall -march=native -Ofast -std=c++14 -fPIC -lmimalloc -mtune=native -ftree-vectorize -funroll-loops -ffast-math -mavx -mavx512f")
 
 find_package(OpenMP REQUIRED)

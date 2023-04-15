@@ -1,5 +1,9 @@
 output.bin
 output_graph.pkl
+output_10m.bin
+*.dat
+r0*/
+*.pkl
 # Compiled object files
 *.o
 *.obj

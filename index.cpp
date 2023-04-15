@@ -31,6 +31,7 @@ typedef KGRAPH_VALUE_TYPE value_type;
 
 int main (int argc, char *argv[]) {
     // omp_set_num_threads(32);
+    std::ios_base::sync_with_stdio(false);
     auto start_time = std::chrono::high_resolution_clock::now();
     string data_path;
     string output_path;
