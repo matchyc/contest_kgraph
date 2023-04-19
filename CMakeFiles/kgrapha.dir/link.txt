@@ -1,2 +1,0 @@
-/usr/bin/ar qc libkgraph.a CMakeFiles/kgrapha.dir/kgraph.cpp.o CMakeFiles/kgrapha.dir/metric.cpp.o
-/usr/bin/ranlib libkgraph.a
