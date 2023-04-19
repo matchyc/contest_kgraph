@@ -4,6 +4,8 @@ output_10m.bin
 *.dat
 r0*/
 *.pkl
+*.log
+*.png
 # Compiled object files
 *.o
 *.obj

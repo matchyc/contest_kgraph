@@ -15,6 +15,7 @@
 
 #ifdef __GNUC__
 #ifdef __AVX__
+// set for avx512 only, avx2 is too slow in this situation
 // #define KGRAPH_MATRIX_ALIGN 1
 // #define KGRAPH_MATRIX_ALIGN 32
 #define KGRAPH_MATRIX_ALIGN 64
@@ -38,27 +39,22 @@ namespace kgraph {
 
     // NOTE :: good efficiency when total_vec_size is integral multiple of 64
     inline void prefetch_vector_l2(const char* vec, size_t vecsize) {
-        // size_t max_prefetch_size = (vecsize / 32) * 32;
-        // for (size_t d = 0; d < max_prefetch_size; d += 32)
-        // _mm_prefetch((const char*) vec + d, _MM_HINT_T1);
         size_t max_prefetch_size = (vecsize / 64) * 64;
         for (size_t d = 0; d < max_prefetch_size; d += 64)
         _mm_prefetch((const char*) vec + d, _MM_HINT_T1);
     }
 
     inline void prefetch_vector_l3(const char* vec, size_t vecsize) {
-        // size_t max_prefetch_size = (vecsize / 32) * 32;
-        // for (size_t d = 0; d < max_prefetch_size; d += 32)
-        // _mm_prefetch((const char*) vec + d, _MM_HINT_T1);
         size_t max_prefetch_size = (vecsize / 64) * 64;
         for (size_t d = 0; d < max_prefetch_size; d += 64)
         _mm_prefetch((const char*) vec + d, _MM_HINT_T2);
     }
 
     /// L2 square distance with AVX instructions.
-    /** AVX instructions have strong alignment requirement for t1 and t2.
-     */
-    // extern float avx512_l2_dist_v2 (const float *x, const float *y, unsigned d);
+    /*
+     AVX instructions have strong alignment requirement for t1 and t2.
+    */
+    extern float avx512_l2_dist_v2 (const float *x, const float *y, unsigned d);
     extern float avx512_l2_distance_opt(float const * a, float const * b, unsigned n);
     extern float avx2_l2_distance(float const* a, float const* b, unsigned dim);
     extern float float_l2sqr_avx_opt(float const* t1, float const* t2, unsigned dim);
@@ -131,22 +127,19 @@ namespace kgraph {
         unsigned col;
         unsigned row;
         size_t stride;
+        unsigned aligned_dim;
         char *data;
 
         void reset (unsigned r, unsigned c) {
             row = r;
             col = c;
             stride = (sizeof(T) * c + A - 1) / A * A;
-            /*
-            data.resize(row * stride);
-            */
+            aligned_dim = stride / sizeof(T);
+
             if (data) free(data);
-            // data = (char *)memalign(A, row * stride); // SSE instruction needs data to be aligned
             if (A != 1) {
-                // data = (char *)memalign(A, row * stride); // SSE instruction needs data to be aligned
-                data = (char *)mi_aligned_alloc(A, row * stride); // SSE instruction needs data to be aligned
+                data = (char *)mi_aligned_alloc(A, row * stride); // AVX instruction needs data to be aligned
             } else {
-                // data = (char *)memalign(A, row * stride); // SSE instruction needs data to be aligned
                 data = (char *)mi_malloc(row * stride);
             }
             zero();
@@ -164,6 +157,9 @@ namespace kgraph {
         unsigned size () const {
             return row;
         }
+        unsigned get_aligned_dim () const {
+            return aligned_dim;
+        }
         unsigned dim () const {
             return col;
         }
@@ -173,13 +169,12 @@ namespace kgraph {
         void resize (unsigned r, unsigned c) {
             reset(r, c);
         }
-        T const *operator [] (unsigned i) const {
+        inline T const *operator [] (unsigned i) const {
             prefetch_vector((const char *)&data[stride * i], stride);
-            // _mm_prefetch((const char*)&data[stride * i], _MM_HINT_T0);
-            // prefetch_vector_l2((const char *)&data[stride * i], stride);
             return reinterpret_cast<T const *>(&data[stride * i]);
         }
-        T *operator [] (unsigned i) {
+        inline T *operator [] (unsigned i) {
+            prefetch_vector((const char *)&data[stride * i], stride);
             return reinterpret_cast<T *>(&data[stride * i]);
         }
         void zero () {
@@ -250,10 +245,11 @@ namespace kgraph {
         unsigned rows;
         unsigned cols;      // # elements, not bytes, in a row, 
         size_t stride;    // # bytes in a row, >= cols * sizeof(element)
+        unsigned aligned_dim;
         uint8_t const *data;
     public:
         MatrixProxy (Matrix<DATA_TYPE> const &m)
-            : rows(m.size()), cols(m.dim()), stride(m.step()), data(reinterpret_cast<uint8_t const *>(m[0])) {
+            : rows(m.size()), cols(m.dim()), stride(m.step()), aligned_dim(m.get_aligned_dim()), data(reinterpret_cast<uint8_t const *>(m[0])) {
         }
 
 #ifndef __AVX__
@@ -291,10 +287,13 @@ namespace kgraph {
         unsigned dim () const {
             return cols;
         }
-        DATA_TYPE const *operator [] (unsigned i) const {
+        unsigned get_aligned_dim () const {
+            return aligned_dim;
+        }
+        inline DATA_TYPE const *operator [] (unsigned i) const {
             return reinterpret_cast<DATA_TYPE const *>(data + stride * i);
         }
-        DATA_TYPE *operator [] (unsigned i) {
+        inline DATA_TYPE *operator [] (unsigned i) {
             return const_cast<DATA_TYPE *>(reinterpret_cast<DATA_TYPE const *>(data + stride * i));
         }
     };
@@ -318,7 +317,7 @@ namespace kgraph {
                 return proxy.size();
             }
             virtual float operator () (unsigned i) const {
-                return DIST_TYPE::apply(proxy[i], query, proxy.dim());
+                return DIST_TYPE::apply(proxy[i], query, proxy.get_aligned_dim());
             }
         };
         template <typename MATRIX_TYPE>
@@ -327,10 +326,8 @@ namespace kgraph {
         virtual unsigned size () const {
             return proxy.size();
         }
-        virtual float operator () (unsigned i, unsigned j) const {
-            // prefetch_vector((const char *) proxy[i], 448);
-            // prefetch_vector((const char *) proxy[j], 448);
-            return DIST_TYPE::apply(proxy[i], proxy[j], proxy.dim());
+        inline virtual float operator () (unsigned i, unsigned j) const {
+            return DIST_TYPE::apply(proxy[i], proxy[j], proxy.get_aligned_dim());
         }
         SearchOracle query (DATA_TYPE const *query) const {
             return SearchOracle(proxy, query);
@@ -381,13 +378,12 @@ namespace kgraph {
 namespace kgraph { namespace metric {
         template <>
         inline float l2sqr::apply<float> (float const *t1, float const *t2, unsigned dim) {
-            // std::cout << "use avx distance" << std::endl;
             // return avx2_l2_distance(t1, t2, dim);
             // return float_l2sqr_avx(t1, t2, dim);f
             // return float_l2sqr_avx_opt(t1, t2, dim);
             // return avx512_l2_distance(t1, t2, dim);
-            return avx512_l2_distance_opt(t1, t2, dim);
             // return avx512_l2_dist_v2(t1, t2, dim);
+            return avx512_l2_distance_opt(t1, t2, dim);
         }
 }}
 #endif
@@ -396,8 +392,6 @@ namespace kgraph { namespace metric {
 namespace kgraph { namespace metric {
         template <>
         inline float l2sqr::apply<float> (float const *t1, float const *t2, unsigned dim) {
-            // std::cout << "use sse2" << '\n';
-            // return float_dot_sse2(t1, t2, dim);
             return float_l2sqr_sse2(t1, t2, dim);
         }
         template <>

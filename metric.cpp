@@ -37,69 +37,9 @@ float float_dot (float const *t1, float const *t2, unsigned dim) {
     tmp1 = _mm256_load_ps(addr1);\
     tmp2 = _mm256_load_ps(addr2);\
     tmp1 = _mm256_sub_ps(tmp1, tmp2); \
-    dest = _mm256_fmadd_ps(tmp1, tmp1, dest)
-    // tmp1 = _mm256_mul_ps(tmp1, tmp1); 
-    // dest = _mm256_add_ps(dest, tmp1); 
+    dest = _mm256_fmadd_ps(tmp1, tmp1, dest) 
 namespace kgraph {
-//     float float_l2sqr_avx (float const *t1, float const *t2, unsigned dim) {
-//     __m256 sum0, sum1, sum2, sum3;
-//     __m256 l0, l1, l2, l3;
-//     __m256 r0, r1, r2, r3;
 
-//     // Determine vector size (aligned with 32-byte boundary)
-//     unsigned D = (dim + 7U) & ~7U;
-//     unsigned DR = D % 32;
-//     unsigned DD = D - DR;
-
-//     // Setup pointers and intermediate variables
-//     const float *l = t1;
-//     const float *r = t2;
-//     const float *e_l = l + DD;
-//     const float *e_r = r + DD;
-//     alignas(32) float unpack[1] = {0};
-
-//     // Initialize accumulators
-//     sum0 = sum1 = sum2 = sum3 = _mm256_setzero_ps();
-
-//     // Process any elements not aligned with 32 bytes
-//     switch (DR) {
-//         case 24:
-//             AVX_L2SQR(e_l+16, e_r+16, sum3, l3, r3);
-//             [[fallthrough]];
-//         case 16:
-//             AVX_L2SQR(e_l+8, e_r+8, sum2, l2, r2);
-//             [[fallthrough]];
-//         case 8:
-//             AVX_L2SQR(e_l, e_r, sum1, l1, r1);
-//             break;
-//         default:
-//             break;
-//     }
-
-//     // Process aligned elements in blocks of 32
-//     for (; l < e_l; l += 32, r += 32) {
-//         // Compute squared differences and accumulate sum
-//         AVX_L2SQR(l, r, sum0, l0, r0);
-//         AVX_L2SQR(l + 8, r + 8, sum1, l1, r1);
-//         AVX_L2SQR(l + 16, r + 16, sum2, l2, r2);
-//         AVX_L2SQR(l + 24, r + 24, sum3, l3, r3);
-//     }
-
-//     // Sum up the 4 intermediate sums horizontally
-//     sum0 = _mm256_add_ps(sum0, sum1);
-//     sum2 = _mm256_add_ps(sum2, sum3);
-//     sum0 = _mm256_add_ps(sum0, sum2);
-//     __m128 hi = _mm256_extractf128_ps(sum0, 1);
-//     __m128 lo = _mm256_castps256_ps128(sum0);
-//     hi = _mm_add_ps(hi, lo);
-//     lo = _mm_movehl_ps(lo, hi);
-//     hi = _mm_add_ss(hi, lo);
-
-//     // Store result in memory
-//     _mm_store_ss(&unpack[0], hi);
-
-//     return unpack[0];
-// }
     float float_l2sqr_avx (float const *t1, float const *t2, unsigned dim) {
         __m256 sum;
         __m256 l0, l1, l2, l3;
@@ -134,96 +74,6 @@ namespace kgraph {
         return ret;//sqrt(ret);
     }
 
-    // float float_l2sqr_avx_opt(float const* t1, float const* t2, unsigned dim) {
-    //     __m256 sum1 = _mm256_setzero_ps();
-    //     __m256 sum2 = _mm256_setzero_ps();
-    //     __m256 sum3 = _mm256_setzero_ps();
-    //     __m256 sum4 = _mm256_setzero_ps();
-    //     unsigned i;
-
-    //     // Process 4 vectors (32 floats) per iteration
-    //     for (i = 0; i < dim - 31; i += 32) {
-    //         __m256 a1 = _mm256_load_ps(t1 + i);
-    //         __m256 b1 = _mm256_load_ps(t2 + i);
-    //         __m256 c1 = _mm256_sub_ps(a1, b1);
-    //         sum1 = _mm256_fmadd_ps(c1, c1, sum1);
-
-    //         __m256 a2 = _mm256_load_ps(t1 + i + 8);
-    //         __m256 b2 = _mm256_load_ps(t2 + i + 8);
-    //         __m256 c2 = _mm256_sub_ps(a2, b2);
-    //         sum2 = _mm256_fmadd_ps(c2, c2, sum2);
-
-    //         __m256 a3 = _mm256_load_ps(t1 + i + 16);
-    //         __m256 b3 = _mm256_load_ps(t2 + i + 16);
-    //         __m256 c3 = _mm256_sub_ps(a3, b3);
-    //         sum3 = _mm256_fmadd_ps(c3, c3, sum3);
-
-    //         __m256 a4 = _mm256_load_ps(t1 + i + 24);
-    //         __m256 b4 = _mm256_load_ps(t2 + i + 24);
-    //         __m256 c4 = _mm256_sub_ps(a4, b4);
-    //         sum4 = _mm256_fmadd_ps(c4, c4, sum4);
-    //     }
-
-    //     // Accumulate into separate AVX lanes
-    //     __m256 sum12 = _mm256_hadd_ps(sum1, sum2);
-    //     __m256 sum34 = _mm256_hadd_ps(sum3, sum4);
-    //     __m256 sum1234 = _mm256_hadd_ps(sum12, sum34);
-
-    //     // Sum up all 8 elements
-    //     float res = _mm256_cvtss_f32(_mm256_hadd_ps(sum1234, sum1234));
-
-    //     // Process remaining dimensions using scalar instructions
-    //     for (; i < dim; i++) {
-    //         float diff = t1[i] - t2[i];
-    //         res += diff * diff;
-    //     }
-
-    //     return res;
-    // }
-    // float float_l2sqr_avx_opt(float const* t1, float const* t2, unsigned dim) {
-    //     float res = 0.f;
-    //     __m256 diff, sum = _mm256_setzero_ps();
-    //     for (unsigned i = 0; i < dim; i += 8) {
-    //         diff = _mm256_loadu_ps(t1 + i) - _mm256_loadu_ps(t2 + i);
-    //         sum = _mm256_add_ps(sum, _mm256_mul_ps(diff, diff));
-    //     }
-    //     alignas(32) float tmp[8];
-    //     _mm256_store_ps(tmp, sum);
-    //     for (unsigned i = 0; i < 8; ++i) {
-    //         res += tmp[i];
-    //     }
-    //     for (unsigned i = dim & ~7u; i < dim; ++i) {
-    //         float d = t1[i] - t2[i];
-    //         res += d * d;
-    //     }
-    //     return res;
-    // }
-    // acalculate l2 distance with vector t1 and vector v2, dimension dim
-// float float_l2sqr_avx_opt(float const* t1, float const* t2, unsigned dim) {
-//     float res = 0.f;
-//     __m256 diff, sum = _mm256_setzero_ps();
-//     unsigned i;
-//     for (i = 0; i < dim - 7; i += 8) {
-//         diff = _mm256_loadu_ps(t1 + i) - _mm256_loadu_ps(t2 + i);
-//         sum = _mm256_add_ps(sum, _mm256_mul_ps(diff, diff));
-//     }
-//     alignas(32) float tmp[8];
-//     _mm256_store_ps(tmp, sum);
-//     for (i = 0; i < 8; ++i) {
-//         res += tmp[i];
-//     }
-//     for (i = dim & ~7u; i < dim; ++i) {
-//         float d = t1[i] - t2[i];
-//         res += d * d;
-//     }
-//     for (i = dim; i < dim + 4; ++i) {
-//         if (t1[i] != 0 || t2[i] != 0) {
-//             float d = t1[i] - t2[i];
-//             res += d * d;
-//         }
-//     }
-//     return res;
-// }
     float avx512_l2_distance(float const * a, float const * b, unsigned n) {
         const int kFloatsPerVec = 16;
         __m512 sum1 = _mm512_setzero_ps();
@@ -236,13 +86,6 @@ namespace kgraph {
             __m512 b_vec1 = _mm512_load_ps(&b[i]);
             __m512 b_vec2 = _mm512_load_ps(&b[i + kFloatsPerVec]);
 
-            // Calculate difference and square the result using fused multiply-add
-            // __m512 diff1 = _mm512_sub_ps(a_vec1, b_vec1);
-            // __m512 squared1 = _mm512_fmadd_ps(diff1, diff1, sum1);
-            // sum1 = squared1;
-            // __m512 diff2 = _mm512_sub_ps(a_vec2, b_vec2);
-            // __m512 squared2 = _mm512_fmadd_ps(diff2, diff2, sum2);
-            // sum2 = squared2;
             __m512 diff1 = _mm512_sub_ps(a_vec1, b_vec1);
             sum1 = _mm512_fmadd_ps(diff1, diff1, sum1);
             __m512 diff2 = _mm512_sub_ps(a_vec2, b_vec2);
@@ -268,7 +111,8 @@ namespace kgraph {
     float avx512_l2_distance_opt(float const * a, float const * b, unsigned n) {
         const uint32_t kFloatsPerVec = 16;
         __m512 sum1 = _mm512_setzero_ps();
-        n = 112;
+        n = 112; // for debug, hard code, just replace with `n` is OK, 'n' is aligned dimension passed in. 
+
         for (uint32_t i = 0; i + kFloatsPerVec <= n; i += kFloatsPerVec) {
             // Load two sets of 32 floats from a and b with aligned memory access
             __m512 a_vec1 = _mm512_load_ps(&a[i]);
@@ -282,71 +126,70 @@ namespace kgraph {
         float result = 0;
         // Sum the remaining floats in the sum vector using non-vectorized operations
         for (int j = 0; j < kFloatsPerVec; j++) {
-            // result += ((float*)&sum12)[j];
             result += ((float*)&sum1)[j];
         }
         return result;
     }
-// static inline __m128 masked_read (int d, const float *x)
-// {
-//     assert (0 <= d && d < 4);
-//     __attribute__((__aligned__(16))) float buf[4] = {0, 0, 0, 0};
-//     switch (d) {
-//       case 3:
-//         buf[2] = x[2];
-//       case 2:
-//         buf[1] = x[1];
-//       case 1:
-//         buf[0] = x[0];
-//     }
-//     return _mm_load_ps (buf);
-//     // cannot use AVX2 _mm_mask_set1_epi32
-// }
-    // float avx512_l2_dist_v2 (const float *x, const float *y, unsigned d)
-    // {
-    //     __m512 msum1 = _mm512_setzero_ps();
-    //     d = 100;
-    //     while (d >= 16) {
-    //         __m512 mx = _mm512_load_ps (x); x += 16;
-    //         __m512 my = _mm512_load_ps (y); y += 16;
-    //         const __m512 a_m_b1 = mx - my;
-    //         msum1 += a_m_b1 * a_m_b1;
-    //         d -= 16;
-    //     }
+    static inline __m128 masked_read (int d, const float *x)
+    {
+        assert (0 <= d && d < 4);
+        __attribute__((__aligned__(16))) float buf[4] = {0, 0, 0, 0};
+        switch (d) {
+        case 3:
+            buf[2] = x[2];
+        case 2:
+            buf[1] = x[1];
+        case 1:
+            buf[0] = x[0];
+        }
+        return _mm_load_ps (buf);
+        // cannot use AVX2 _mm_mask_set1_epi32
+    }
+    float avx512_l2_dist_v2 (const float *x, const float *y, unsigned d)
+    {
+        __m512 msum1 = _mm512_setzero_ps();
+        d = 100;
+        while (d >= 16) {
+            __m512 mx = _mm512_load_ps (x); x += 16;
+            __m512 my = _mm512_load_ps (y); y += 16;
+            const __m512 a_m_b1 = mx - my;
+            msum1 += a_m_b1 * a_m_b1;
+            d -= 16;
+        }
 
-    //     __m256 msum2 = _mm512_extractf32x8_ps(msum1, 1);
-    //     msum2 +=       _mm512_extractf32x8_ps(msum1, 0);
+        __m256 msum2 = _mm512_extractf32x8_ps(msum1, 1);
+        msum2 +=       _mm512_extractf32x8_ps(msum1, 0);
 
-    //     while (d >= 8) {
-    //         __m256 mx = _mm256_load_ps (x); x += 8;
-    //         __m256 my = _mm256_load_ps (y); y += 8;
-    //         const __m256 a_m_b1 = mx - my;
-    //         msum2 += a_m_b1 * a_m_b1;
-    //         d -= 8;
-    //     }
+        while (d >= 8) {
+            __m256 mx = _mm256_load_ps (x); x += 8;
+            __m256 my = _mm256_load_ps (y); y += 8;
+            const __m256 a_m_b1 = mx - my;
+            msum2 += a_m_b1 * a_m_b1;
+            d -= 8;
+        }
 
-    //     __m128 msum3 = _mm256_extractf128_ps(msum2, 1);
-    //     msum3 +=       _mm256_extractf128_ps(msum2, 0);
+        __m128 msum3 = _mm256_extractf128_ps(msum2, 1);
+        msum3 +=       _mm256_extractf128_ps(msum2, 0);
 
-    //     if (d >= 4) {
-    //         __m128 mx = _mm_loadu_ps (x); x += 4;
-    //         __m128 my = _mm_loadu_ps (y); y += 4;
-    //         const __m128 a_m_b1 = mx - my;
-    //         msum3 += a_m_b1 * a_m_b1;
-    //         d -= 4;
-    //     }
+        if (d >= 4) {
+            __m128 mx = _mm_loadu_ps (x); x += 4;
+            __m128 my = _mm_loadu_ps (y); y += 4;
+            const __m128 a_m_b1 = mx - my;
+            msum3 += a_m_b1 * a_m_b1;
+            d -= 4;
+        }
 
-    //     if (d > 0) {
-    //         __m128 mx = masked_read (d, x);
-    //         __m128 my = masked_read (d, y);
-    //         __m128 a_m_b1 = mx - my;
-    //         msum3 += a_m_b1 * a_m_b1;
-    //     }
+        if (d > 0) {
+            __m128 mx = masked_read (d, x);
+            __m128 my = masked_read (d, y);
+            __m128 a_m_b1 = mx - my;
+            msum3 += a_m_b1 * a_m_b1;
+        }
 
-    //     msum3 = _mm_hadd_ps (msum3, msum3);
-    //     msum3 = _mm_hadd_ps (msum3, msum3);
-    //     return  _mm_cvtss_f32 (msum3);
-    // }
+        msum3 = _mm_hadd_ps (msum3, msum3);
+        msum3 = _mm_hadd_ps (msum3, msum3);
+        return  _mm_cvtss_f32 (msum3);
+    }
 
     float avx2_l2_distance(const float* a, const float* b, unsigned dim) {
         __m256 sum = _mm256_setzero_ps(); // Initialize sum to 0
@@ -364,10 +207,7 @@ namespace kgraph {
         for (unsigned j = 0; j < 8; ++j) { // Reduce sum to a single float
             result += ((float*)&sum)[j];
         }
-        // for (; i < dim; ++i) { // Process remaining floats
-        //     float diff = a[i] - b[i];
-        //     result += diff * diff;
-        // }
+  
         return result; // Return square root of sum
     }
 
