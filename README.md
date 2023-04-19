@@ -23,12 +23,22 @@ The solution achieves performance improvement over the original algorithm and co
 
 ## Dependencies
 
-HardWare:
-intel cpu with skylake architecture. (newer is better, but compile option **should be changed** in CMake appropriately, or it will be significant slow).
+- HardWare:
+  - Intel CPU with Skylake architecture. Newer CPUs are better suited for this task, but it is important to **adjust the compile option** in CMake appropriately, otherwise the program will perform significantly slower. (The solution uses AVX512 for acceleration)
+
 
 - [mimalloc](https://github.com/microsoft/mimalloc) open-source allocator from microsoft
 - Boost >= 1.65
 - CMake >= 3.2
+- openmp
+
+Tested on Ubuntu 20.04
+```bash
+# install mimalloc by following its guidance
+sudo apt install libomp-dev
+sudo apt install libboost-all-dev
+```
+g++ version >= 11 in the local machine, because we use `reprozip` tool in during contest to submit code for evaluation, so that's may have effects.
 
 ## Build & Run
 
@@ -48,4 +58,5 @@ cmake . -DCMAKE_BUILD_TYPE=Release  && make -j
 -S 85 -R 400 --iterations 6 --raw --dim 100 --skip 4
 ```
 
-The options above could be used to reproduce a recall level of 0.981 in a 10M dataset within 30min on an Azure Machine provided by the contest organizers.
+Based on experimental results obtained from the provided dataset, it can be concluded that a recall level of 0.981 is attainable for a dataset with a size of 10 million within a reasonable time frame of 30 minutes when using the recommended arguments and options on Azure Standard F32s_v2 machines as provided by the contest organizers. 
+Additionally, the proposed solution was able to achieve a recall@100 level of 0.98 in just 1600 seconds when executed on the same machines, This was accomplished by using an alternate strategy and tuning. 
