@@ -6,6 +6,8 @@ r0*/
 *.pkl
 *.log
 *.png
+CMakeFiles/*
+
 # Compiled object files
 *.o
 *.obj
